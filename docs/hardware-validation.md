@@ -1,10 +1,10 @@
-# Hardware Validation
+# 実機検証計画
 
-## Purpose
+## 目的
 
 この計画は、実装で隠せないハードウェア/runtime依存を最初に検証するためのGate 0です。成功した手順だけでなく、失敗条件とログを残します。
 
-## Known constraints
+## 既知の制約
 
 - VIVE Tracker 3.0はSteamVR Base Station 1.0/2.0を使用する
 - VIVE Ultimate Trackerはinside-out trackingとVIVE Wireless Dongleを使用する
@@ -21,9 +21,9 @@
 - [OpenVR API documentation](https://github.com/ValveSoftware/openvr/wiki/API-Documentation)
 - [`XR_HTCX_vive_tracker_interaction`](https://registry.khronos.org/OpenXR/specs/1.1/man/html/XR_HTCX_vive_tracker_interaction.html)
 
-## Required equipment
+## 必要な機材
 
-### Initial
+### 初期検証
 
 - Windows x86-64 physical machine
 - wired 1GbE connection to Mac
@@ -34,7 +34,7 @@
 - VIVE Wireless Dongle
 - Mac Hub development machine
 
-### Record for every run
+### 検証ごとの記録項目
 
 - Windows edition/build
 - CPU、memory
@@ -50,7 +50,7 @@
 - room lightingと大きさ
 - network topology
 
-## Evidence layout
+## 証跡の配置
 
 ```text
 hardware-tests/
@@ -65,7 +65,7 @@ hardware-tests/
 
 raw logにsecretや個人情報を含めません。大きなrecordingはGitへ直接commitせず、GitHub artifactまたは外部保管先とhashを記録します。
 
-## Gate tests
+## Gate検証
 
 ### H0: Runtime inventory
 
@@ -239,10 +239,10 @@ Scenarios:
 
 目的は`space_epoch`をいつ増やし、calibrationをいつ無効化すべきかを決めることです。
 
-## Result template
+## 結果テンプレート
 
 ```markdown
-# Result
+# 検証結果
 
 - Test ID:
 - Date/time:
@@ -250,20 +250,20 @@ Scenarios:
 - Environment:
 - Outcome: PASS / FAIL / INCONCLUSIVE
 
-## Observations
+## 観察事項
 
-## Metrics
+## 測定値
 
-## Evidence
+## 証跡
 
-## Unexpected behavior
+## 想定外の動作
 
-## Decision impact
+## 設計判断への影響
 
-## Follow-up issue
+## 後続Issue
 ```
 
-## Gate decision
+## Gate判定
 
 M0の最後に次のいずれかをADRへ記録します。
 

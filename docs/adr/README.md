@@ -1,14 +1,14 @@
-# Architecture Decision Records
+# アーキテクチャ決定記録
 
 ADRは「何を選んだか」だけでなく、「なぜ選び、何を捨てたか」を保持します。
 
-| ID | Title | Status |
+| ID | タイトル | Status |
 | --- | --- | --- |
-| [0001](0001-platform-native-stack.md) | Platform-native implementation stack | Accepted |
-| [0002](0002-openvr-first-backend.md) | OpenVR-first acquisition with replaceable backends | Accepted, conditional |
-| [0003](0003-flatbuffers-over-udp.md) | FlatBuffers over UDP for real-time pose | Accepted |
-| [0004](0004-multi-bridge-architecture.md) | Multi-Bridge architecture | Accepted |
-| [0005](0005-mcap-recording.md) | MCAP recording of normalized frames | Accepted |
+| [0001](0001-platform-native-stack.md) | Platform nativeな実装技術スタック | Accepted |
+| [0002](0002-openvr-first-backend.md) | 交換可能なbackendとOpenVR優先の取得 | Accepted, conditional |
+| [0003](0003-flatbuffers-over-udp.md) | 実時間姿勢のFlatBuffers over UDP配信 | Accepted |
+| [0004](0004-multi-bridge-architecture.md) | 複数Bridgeアーキテクチャ | Accepted |
+| [0005](0005-mcap-recording.md) | 正規化frameのMCAP記録 | Accepted |
 
 新しいADRは[template](0000-template.md)をコピーして作成します。
 

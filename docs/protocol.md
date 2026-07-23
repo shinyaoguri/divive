@@ -1,10 +1,10 @@
-# Protocol
+# 通信プロトコル
 
 Status: **Draft**
 
 この文書はwire contractの設計基準です。具体的なFlatBuffers schemaとgolden vectorsを追加するPRでAcceptedへ変更します。
 
-## Layers
+## 通信レイヤー
 
 | Path | Transport | Encoding | Reliability |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ Status: **Draft**
 
 poseとcontrolを同じqueueへ入れません。
 
-## Canonical conventions
+## 共通規約
 
 - right-handed
 - metres
@@ -27,7 +27,7 @@ poseとcontrolを同じqueueへ入れません。
 - quaternionは正規化する
 - matrixをwire formatの正としない
 
-## Identity
+## 識別子
 
 bare serialだけでなくnamespaceを含めます。
 
@@ -95,7 +95,7 @@ Tracker record:
 
 roleはHubを正とします。Bridgeがruntime roleを報告する場合も、`runtime_role`として別fieldに入れます。
 
-## Datagram size and batching
+## Datagram sizeとbatch分割
 
 IP fragmentationを避けるため、既定の最大UDP payloadを1,200 bytesにします。
 
@@ -107,7 +107,7 @@ IP fragmentationを避けるため、既定の最大UDP payloadを1,200 bytesに
 
 batch内のTracker順序に意味を持たせません。
 
-## Ordering
+## 順序制御
 
 Hubは`session_id + bridge_id`ごとにsequenceを管理します。
 
@@ -119,9 +119,9 @@ Hubは`session_id + bridge_id`ごとにsequenceを管理します。
 
 32-bit sequenceを使う場合はwrap-around比較を定義します。実装前に64-bitを第一候補としてpayloadコストを確認します。
 
-## Time
+## 時刻
 
-### Clock domains
+### Clock domain
 
 - `bridge_monotonic`
 - `hub_monotonic`
@@ -129,7 +129,7 @@ Hubは`session_id + bridge_id`ごとにsequenceを管理します。
 
 monotonic timeは同一machine内での順序とdurationに使用します。異なるmachineの値を直接引いてone-way latencyとしません。
 
-### Clock sync
+### Clock同期
 
 control channelでNTP風の4 timestamp exchangeを繰り返し、最低RTT付近のsampleからoffsetを推定します。
 
@@ -142,7 +142,7 @@ Hubがframe時刻を変換できない場合、receive timeとsequenceだけで�
 
 wall clockは録画の検索やoperator表示にだけ使い、補間の基準にしません。
 
-## Latest-value semantics
+## 最新値優先のsemantics
 
 WebSocket/TCPを使う場合も、application semanticsはlatest valueです。
 
@@ -151,7 +151,7 @@ WebSocket/TCPを使う場合も、application semanticsはlatest valueです。
 - control response、state transition、recording commandは置換しない
 - p5.js clientはmessage handlerでlatest stateを更新し、`draw()`で読む
 
-## Status transitions
+## 状態遷移
 
 wire上の主要状態:
 
@@ -171,7 +171,7 @@ wire上の主要状態:
 
 未知のreasonは主要状態を壊さず表示できるようにします。
 
-## Versioning
+## Version管理
 
 ### Protocol version
 
@@ -196,7 +196,7 @@ protocol versionとは独立です。
 
 をframe/配信metadataに付与します。
 
-## Authentication
+## 認証
 
 MVPではprivate LANを前提にできますが、tokenをUDP payloadへ平文で付けません。
 
@@ -210,7 +210,7 @@ Production案:
 
 暗号化が必要な環境では、TLS controlとVPN/VLANを優先します。独自暗号化protocolは作りません。
 
-## JSON debugging shape
+## Debug用JSON形式
 
 JSON APIは人間が読めることを優先し、binary wire layoutを模倣しません。
 
@@ -234,7 +234,7 @@ JSON APIは人間が読めることを優先し、binary wire layoutを模倣し
 }
 ```
 
-## Pending decisions
+## 未決定事項
 
 - FlatBuffers schemaの正確なfield ID
 - 64-bit sequence

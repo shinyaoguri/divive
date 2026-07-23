@@ -1,16 +1,16 @@
-# ADR 0002: OpenVR-first acquisition with replaceable backends
+# ADR 0002: 交換可能なbackendとOpenVR優先の取得
 
 - Status: Accepted, conditional
 - Date: 2026-07-23
 - Condition: [Hardware Validation](../hardware-validation.md)のM0 Gate通過
 
-## Context
+## 背景
 
 Tracker 3.0とUltimate TrackerをヘッドセットなしでWindowsから取得する必要があります。OpenVRはSteamVR deviceを直接列挙し、pose/propertyへアクセスできます。OpenXRにはVIVE Tracker extensionがありますが、session/action space中心で、headless用途とUltimateのruntime挙動に不確定要素があります。
 
 UltimateはVIVE Hubから通常のVIVE Trackerとしてemulateされる可能性がありますが、実機で確認が必要です。
 
-## Decision
+## 決定
 
 - MVPの第一候補をOpenVRとする
 - `ITrackingBackend`境界を設ける
@@ -18,7 +18,7 @@ UltimateはVIVE Hubから通常のVIVE Trackerとしてemulateされる可能性
 - OpenVRでUltimateを取得できない場合だけOpenXR backendをproduction化する
 - 非公開protocol、runtime patch、Bluetooth直結をproduction backendにしない
 
-## Alternatives considered
+## 検討した選択肢
 
 ### OpenXR only
 
@@ -32,22 +32,22 @@ Ultimate固有機能へ近い可能性がありますが、公開された汎用
 
 runtimeを避けられる可能性がありますが、非公開仕様、firmware互換性、保守、法的/配布上のリスクが高いため不採用です。
 
-## Consequences
+## 影響
 
-### Positive
+### 利点
 
 - Tracker 3.0のSteamVR modelと合う
 - device inventory/propertyを直接取得できる
 - runtime interfaceの後方互換性を利用できる
 - backend差をBridge内部に閉じ込められる
 
-### Negative
+### 欠点
 
 - SteamVRへ依存する
 - headlessのnull/virtual HMD設定が運用リスクになり得る
 - UltimateでOpenXR backendが追加される可能性がある
 
-### Risks and mitigations
+### リスクと対策
 
 - Risk: SteamVR updateでheadless手順が壊れる
   - Mitigation: tested runtime matrix、startup diagnostics、release前hardware test
@@ -56,7 +56,7 @@ runtimeを避けられる可能性がありますが、非公開仕様、firmwar
 - Risk: backend固有fieldがpublic modelへ漏れる
   - Mitigation: canonical adapterとavailability flags
 
-## Validation
+## 検証
 
 - H1 Tracker 3.0 without HMD
 - H2 Ultimate without HMD
@@ -64,7 +64,7 @@ runtimeを避けられる可能性がありますが、非公開仕様、firmwar
 - H4 rate/prediction
 - H5 reconnect/identity
 
-## Revisit when
+## 見直す条件
 
 - M0でOpenVRがExit Criteriaを満たさない
 - Khronos extensionとruntimeのheadless supportが安定する

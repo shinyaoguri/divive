@@ -1,14 +1,14 @@
-# Requirements
+# 要求仕様
 
 Status: **Baseline for planning**
 
 要求IDはIssue、PR、test resultから参照します。実機検証で成立しない要求は黙って弱めず、ADRとこの文書を更新します。
 
-## Product objective
+## 製品の目的
 
 VIVE Trackerの6DoF姿勢をヘッドセットなしでWindowsから取得し、Mac上の複数コンテンツへ低遅延・安定して配信します。コンテンツはSteamVR/VIVE固有APIを直接扱いません。
 
-## Assumptions
+## 前提
 
 | ID | Assumption |
 | --- | --- |
@@ -23,9 +23,9 @@ VIVE Trackerの6DoF姿勢をヘッドセットなしでWindowsから取得し、
 
 ASM-005は、Ultimateの1 PC/dongleあたり最大5台という公式制約を考慮したものです。
 
-## Functional requirements
+## 機能要求
 
-### Acquisition
+### 取得
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ ASM-005は、Ultimateの1 PC/dongleあたり最大5台という公式制約を�
 
 ACQ-001/002はhardware gateです。成立しない場合、目的または対応hardwareを再決定します。
 
-### Transport
+### 通信
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ ACQ-001/002はhardware gateです。成立しない場合、目的または対�
 | HUB-007 | 通常はcontent/control APIをlocalhostへbindする | Must |
 | HUB-008 | Simulator、Playback、Networkが同じinput interfaceを使う | Must |
 
-### Content APIs
+### Content API
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ ACQ-001/002はhardware gateです。成立しない場合、目的または対�
 | SIM-005 | loss、delay、jitter、reordering、disconnect、lostを注入する | Must by M3 |
 | SIM-006 | seedから障害を再現できる | Must |
 
-### Recording
+### 録画
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ ACQ-001/002はhardware gateです。成立しない場合、目的または対�
 | REC-005 | calibration/runtime metadataを記録する | Must |
 | REC-006 | 途中終了したrecordingを可能な範囲で回復する | Should |
 
-### Calibration
+### キャリブレーション
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -115,9 +115,9 @@ ACQ-001/002はhardware gateです。成立しない場合、目的または対�
 | CAL-005 | tracking space ID/epochとprofile revisionを関連付ける | Must |
 | CAL-006 | 異なるBridge spaceを較正なしで混合しない | Must |
 
-## Non-functional requirements
+## 非機能要求
 
-### Performance
+### 性能
 
 | ID | Target |
 | --- | --- |
@@ -129,7 +129,7 @@ ACQ-001/002はhardware gateです。成立しない場合、目的または対�
 
 PERF-002はnetwork one-way latencyを含みません。測定点をtest reportに記載します。
 
-### Reliability
+### 信頼性
 
 | ID | Target |
 | --- | --- |
@@ -139,7 +139,7 @@ PERF-002はnetwork one-way latencyを含みません。測定点をtest report�
 | REL-004 | Bridge単位の障害をisolate |
 | REL-005 | Recorder I/Oがpose distributionを停止させない |
 
-### Security
+### セキュリティ
 
 | ID | Target |
 | --- | --- |
@@ -149,7 +149,7 @@ PERF-002はnetwork one-way latencyを含みません。測定点をtest report�
 | SEC-004 | production UDP packetをsession/auth tagで検証 |
 | SEC-005 | mDNS resultを信頼根拠にしない |
 
-### Compatibility
+### 互換性
 
 | ID | Target |
 | --- | --- |
@@ -160,7 +160,7 @@ PERF-002はnetwork one-way latencyを含みません。測定点をtest report�
 | COMP-005 | protocol minor versionでoptional field追加を許容 |
 | COMP-006 | recording schema versionを保持 |
 
-## Traceability
+## 要求追跡
 
 | Requirement group | Primary milestone | Primary evidence |
 | --- | --- | --- |
@@ -175,7 +175,7 @@ PERF-002はnetwork one-way latencyを含みません。測定点をtest report�
 | REL | M1–M4 | Fault/soak runs |
 | SEC | M4 | Threat review、auth/replay tests |
 
-## Open decisions
+## 未決定事項
 
 - Minimum macOS version
 - Supported Unity LTS

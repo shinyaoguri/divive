@@ -1,4 +1,4 @@
-name: Hardware validation
+name: 実機検証
 description: Tracker、runtime、networkに関する再現可能な実機検証
 title: "[Hardware] "
 labels: []
@@ -12,7 +12,7 @@ body:
   - type: input
     id: test_id
     attributes:
-      label: Test ID
+      label: 検証ID
       description: H1、H2など。新規検証なら短い識別子を付けてください。
       placeholder: H2
     validations:
@@ -21,7 +21,7 @@ body:
   - type: dropdown
     id: hardware
     attributes:
-      label: Hardware
+      label: 対象ハードウェア
       options:
         - VIVE Tracker 3.0
         - VIVE Ultimate Tracker
@@ -34,7 +34,7 @@ body:
   - type: textarea
     id: question
     attributes:
-      label: Question or hypothesis
+      label: 検証する問いまたは仮説
       description: この検証で何を判定しますか。
     validations:
       required: true
@@ -42,7 +42,7 @@ body:
   - type: textarea
     id: environment
     attributes:
-      label: Environment
+      label: 環境
       description: Windows、SteamVR、VIVE Hub、firmware、dongle、base station、networkを含めてください。
       placeholder: |
         Windows:
@@ -57,7 +57,7 @@ body:
   - type: textarea
     id: procedure
     attributes:
-      label: Procedure
+      label: 手順
       description: 別の人が再現できる手順を書いてください。
     validations:
       required: true
@@ -65,7 +65,7 @@ body:
   - type: textarea
     id: pass_criteria
     attributes:
-      label: Pass / fail criteria
+      label: 合格・不合格の基準
       description: 実行前に判定基準を定義してください。
     validations:
       required: true
@@ -73,13 +73,13 @@ body:
   - type: textarea
     id: evidence
     attributes:
-      label: Evidence and metrics
+      label: 証跡とmetrics
       description: 実行後にログ、recording、screenshot、hash、測定値を追加してください。
 
   - type: textarea
     id: impact
     attributes:
-      label: Decision impact
+      label: 設計判断への影響
       description: backend、MVP scope、運用前提へどう影響しますか。
 
   - type: checkboxes

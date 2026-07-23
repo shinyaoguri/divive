@@ -1,6 +1,6 @@
-# Architecture
+# アーキテクチャ
 
-## Design drivers
+## 設計上の優先事項
 
 優先順位は次の通りです。
 
@@ -13,7 +13,7 @@
 
 低遅延は重要ですが、16台×120Hz程度のデータ量そのものは小さいため、CPU性能よりqueue、時刻、runtime互換性を重視します。
 
-## System context
+## システム全体像
 
 ```mermaid
 flowchart TB
@@ -36,7 +36,7 @@ flowchart TB
     operator --> hub
 ```
 
-### Trust boundaries
+### 信頼境界
 
 - Tracker runtimeとBridgeは同じWindowsユーザーセッション
 - BridgeとHubは同一LAN
@@ -44,7 +44,7 @@ flowchart TB
 - LAN公開時はtrusted networkだけを前提にせず認証する
 - mDNSは発見にのみ使い、相手の正当性を保証しない
 
-## Components
+## コンポーネント
 
 ### Windows Tracker Bridge
 
@@ -94,7 +94,7 @@ BridgeはWindows Serviceではなくログインユーザーのプロセスと�
 
 SDKはSteamVR/VIVE Hubを認識しません。
 
-## Multiple Bridge model
+## 複数Bridgeモデル
 
 単一Bridgeを前提にしません。
 
@@ -119,7 +119,7 @@ flowchart LR
 
 異なる`tracking_space_id`の姿勢を、対応するcalibrationなしで同じStage Spaceへ公開してはいけません。
 
-## Data pipeline
+## データパイプライン
 
 ```text
 capture backend
@@ -138,14 +138,14 @@ capture backend
   └─ GUI snapshot
 ```
 
-### Latest-value rule
+### 最新値優先規則
 
 - pose経路に無制限queueを置かない
 - consumerが遅い場合、未送信の古いposeを新しいposeで上書きする
 - status、configuration、recording commandは失ってはいけないため、poseとは別経路にする
 - Recorderだけは時系列を保存するが、disk writerの遅延がingestをブロックしないようbounded bufferとdrop metricsを持つ
 
-### Threading
+### スレッド構成
 
 Windows:
 
@@ -162,7 +162,7 @@ Mac:
 
 network callback内で圧縮、disk flush、3D描画、長いJSON生成を行いません。
 
-## Source abstraction
+## 入力sourceの抽象化
 
 Hub入力は実機に依存しません。
 
@@ -182,7 +182,7 @@ protocol FrameSource {
 
 取得元を切り替えても、calibration、distribution、SDK APIは変えません。
 
-## State machine
+## 状態遷移
 
 Trackerの状態は少なくとも次を区別します。
 
@@ -205,7 +205,7 @@ stateDiagram-v2
 
 ネットワーク欠落と光学的なtracking lostを混同しません。原因は追加のreason fieldで表現します。
 
-## Failure behavior
+## 障害時の動作
 
 | Failure | Expected behavior |
 | --- | --- |
@@ -218,7 +218,7 @@ stateDiagram-v2
 | Calibration mismatch | content配信を停止またはuncalibratedとして明示 |
 | Simulator failure injection | 実機と同じmetrics/state pathを通す |
 
-## Observability
+## 観測性
 
 最低限のmetrics:
 
@@ -236,7 +236,7 @@ stateDiagram-v2
 
 one-way latencyはclock syncなしでは正確に測れません。M1ではreceive processing timeとinter-arrivalを測り、M4でclock offset推定を追加します。
 
-## Security
+## セキュリティ
 
 MVP:
 
@@ -256,7 +256,7 @@ Production:
 
 tokenだけで暗号化はされません。信頼できないLANではTLSまたはVPN/VLANを併用します。
 
-## Deployment
+## 配布と実行
 
 ### Windows
 
@@ -273,7 +273,7 @@ tokenだけで暗号化はされません。信頼できないLANではTLSまた
 - localhost portsは競合検出
 - first-runでnetwork permissionと保存先を案内
 
-## Constraints and open risks
+## 制約と未解決リスク
 
 - SteamVRのヘッドセットなし運用が将来も保証されるとは限らない
 - Ultimate TrackerのPC利用はVIVE Hubとfirmwareへ依存する

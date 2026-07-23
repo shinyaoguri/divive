@@ -1,6 +1,6 @@
-# Calibration and Coordinate Spaces
+# キャリブレーションと座標空間
 
-## Principles
+## 原則
 
 - 追跡runtimeの座標を直接contentへ露出しない
 - rigid calibrationとpresentation scaleを分ける
@@ -8,7 +8,7 @@
 - profileとtracking spaceをversion管理する
 - SDKごとの座標変換は決定的で、conformance testを持つ
 
-## Spaces
+## 座標空間
 
 ```mermaid
 flowchart LR
@@ -51,7 +51,7 @@ Bridgeがnative spaceから正規化します。
 
 Unity、Unreal、p5.js側の規約です。SDKが変換します。
 
-## Transform composition
+## 変換の合成
 
 column vector表記を文書上の基準にします。
 
@@ -71,7 +71,7 @@ q_stage = q_stage_from_tracker ⊗ q_tracker
 
 positionとrotationで別の変換順序を使わないよう、rigid transform型でまとめます。
 
-## Rigid calibration and scale
+## 剛体較正とscale
 
 Tracker SpaceからStage Spaceへの変換はSE(3)のrigid transformです。
 
@@ -83,7 +83,7 @@ Tracker SpaceからStage Spaceへの変換はSE(3)のrigid transformです。
 
 non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対応です。
 
-## Calibration methods
+## キャリブレーション方法
 
 ### MVP: origin and forward
 
@@ -104,7 +104,7 @@ non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対�
 - RMS/max residualを表示
 - 外れ値除外は自動で隠さず、採否をoperatorへ示す
 
-## Multi-Bridge calibration
+## 複数Bridgeのキャリブレーション
 
 各Bridgeのtracking spaceごとにprofile entryを持ちます。
 
@@ -142,7 +142,7 @@ non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対�
 
 role mappingはcalibration profileから分離します。同じ空間較正を使いながら、Trackerの役割だけ変更できるためです。
 
-## Engine conversions
+## Engine座標への変換
 
 正確な変換は実装時にgolden vectorsで固定します。
 
@@ -158,7 +158,7 @@ Unrealの座標単位へmetreから変換し、handednessと軸規約を変換�
 
 SDKはcanonical 3D値をそのまま提供します。canvas、WebGL camera、画面pixelへの投影はcontent側の責務です。
 
-## Conformance tests
+## 適合性テスト
 
 全SDKで次のgolden casesを共有します。
 
@@ -173,7 +173,7 @@ SDKはcanonical 3D値をそのまま提供します。canvas、WebGL camera、�
 
 quaternion `q`と`-q`は同じrotationなので、成分の単純一致ではなく回転として比較します。
 
-## Invalid calibration behavior
+## 無効なキャリブレーションの扱い
 
 - 未較正spaceは`uncalibrated`として表示する
 - production profileでは未較正Trackerをcontentへ黙って混ぜない

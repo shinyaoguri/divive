@@ -1,6 +1,10 @@
-# Development
+# 開発ガイド
 
-## Supported development hosts
+## 言語
+
+ドキュメント、Issue、PR本文、コードコメントは日本語を基本とします。source codeの識別子、API名、wire field、ログのmachine-readableなkeyは英語とし、技術的な正確さを優先します。
+
+## 対応する開発環境
 
 ### macOS
 
@@ -24,7 +28,7 @@ hardware integrationと正式Bridge artifactの環境です。
 
 MacからWindows artifactを生成できることより、Windows上のcanonical buildが再現することを優先します。
 
-## Planned toolchains
+## 採用予定のツールチェーン
 
 ### Bridge
 
@@ -62,7 +66,7 @@ Candidate libraries:
 
 engine versionを「最新」に追従し続けるのではなく、サポートmatrixを明示します。
 
-## Repository boundaries
+## リポジトリ構成
 
 ```text
 protocol/       schema、generated code、golden vectors
@@ -76,7 +80,7 @@ docs/           architecture and plans
 
 generated codeは手編集しません。schema compiler versionを固定し、差分をreviewできる形で生成します。
 
-## Coding rules
+## コーディング規約
 
 ### Cross-language
 
@@ -108,7 +112,7 @@ generated codeは手編集しません。schema compiler versionを固定し、�
 - tracking lost時の既定挙動を文書化
 - coordinate conversionをgolden testsで検証
 
-## Test strategy
+## テスト戦略
 
 ### Unit
 
@@ -147,7 +151,7 @@ generated codeは手編集しません。schema compiler versionを固定し、�
 
 [Hardware Validation](hardware-validation.md)に従います。通常CIと区別し、機材/runtime/firmwareを証跡へ含めます。
 
-## Planned CI
+## CI計画
 
 | Job | Host | Scope |
 | --- | --- | --- |
@@ -162,7 +166,7 @@ generated codeは手編集しません。schema compiler versionを固定し、�
 
 hardware jobは通常PRで自動実行しません。機材の排他制御とruntime状態を管理できるようになってから導入します。
 
-## Branch and review
+## Branchとreview
 
 - feature branchからPR
 - protocol/architecture変更はDraft PRで早期共有
@@ -170,7 +174,7 @@ hardware jobは通常PRで自動実行しません。機材の排他制御とrun
 - merge前に関連ADRとExit Criteriaを確認する
 - unrelated generated filesやrecordingを混ぜない
 
-## Configuration
+## 設定
 
 設定の優先順位案:
 
@@ -183,7 +187,7 @@ command line
 
 secretはconfig repositoryへcommitしません。profileとrole mappingはsecretではないものの、machine-local stateとportable exportを分離します。
 
-## Logging
+## ログ
 
 structured log fields:
 
@@ -197,7 +201,7 @@ structured log fields:
 
 poseを通常ログへ毎frame出しません。必要時はMCAP recordingまたはsampling debug logを使います。
 
-## Release
+## リリース
 
 ### Bridge
 
@@ -216,6 +220,6 @@ poseを通常ログへ毎frame出しません。必要時はMCAP recordingまた
 
 versioningは最初の外部利用前にSemVer方針を確定します。protocol、app、recording schemaのversionは独立して管理します。
 
-## Documentation checks
+## ドキュメント検査
 
 初期段階はrelative linkとMarkdown構造をreviewします。実装scaffold追加時にmarkdownlintとlink checkerをCIへ導入し、外部リンクの一時的障害で開発全体を止めない設定にします。

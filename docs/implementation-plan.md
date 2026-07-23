@@ -1,4 +1,4 @@
-# Implementation Plan
+# 実装計画
 
 ## 成功条件
 
@@ -50,7 +50,7 @@ flowchart TD
 
 ハードウェアprobeの完了前に、本番backendへ大きな投資をしません。protocolとSimulatorは並行着手できますが、取得API固有のfieldをcanonical modelへ漏らさないようにします。
 
-## Workstream A: Hardware and acquisition
+## 作業領域A: Hardwareと取得
 
 ### A0. 環境inventory
 
@@ -87,7 +87,7 @@ flowchart TD
 3. Ultimateがheadless非対応ならMVP対象外または前提変更
 4. 非公開・非保証APIやBluetooth直結はproduction backendにしない
 
-## Workstream B: Protocol
+## 作業領域B: Protocol
 
 ### B0. Canonical model
 
@@ -114,7 +114,7 @@ flowchart TD
 
 送信元と受信先のmonotonic clockを直接比較しません。control channelでRTTとoffsetを推定し、Hub timeへ写像します。M1ではreceive ageとsequenceを優先し、絶対的なone-way latencyを断定しません。
 
-## Workstream C: Windows Bridge
+## 作業領域C: Windows Bridge
 
 ### C0. Skeleton
 
@@ -151,7 +151,7 @@ flowchart TD
 
 Control clientはM4へ延期可能ですが、wire contractでは予約します。
 
-## Workstream D: Mac Hub
+## 作業領域D: Mac Hub
 
 ### D0. Headless core
 
@@ -195,7 +195,7 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 - roleとprofile編集
 - record/playback/simulator操作
 
-## Workstream E: SDKs
+## 作業領域E: SDK
 
 ### E0. Unity
 
@@ -230,7 +230,7 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 
 UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開します。
 
-## Workstream F: Recorder, Simulator, calibration
+## 作業領域F: Recorder、Simulator、calibration
 
 ### F0. MCAP
 
@@ -257,7 +257,7 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - profile version/epoch
 - residual error表示
 
-## Workstream G: Operations
+## 作業領域G: 運用
 
 - Windows logon taskによる自動起動
 - crash restart
@@ -285,7 +285,7 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 
 GUIを先に作らないことが重要です。Hub pipelineとprotocolがCLIテストで安定してからUIを接続します。
 
-## Definition of Done
+## 完了の定義
 
 各Issueは、該当する項目を満たして完了です。
 

@@ -1,4 +1,4 @@
-name: Bug
+name: 不具合報告
 description: 再現可能な不具合を報告する
 title: "[Bug] "
 labels: []
@@ -7,14 +7,14 @@ body:
   - type: textarea
     id: summary
     attributes:
-      label: Summary
+      label: 概要
     validations:
       required: true
 
   - type: dropdown
     id: component
     attributes:
-      label: Component
+      label: 対象コンポーネント
       options:
         - Windows Bridge
         - Mac Hub
@@ -32,7 +32,7 @@ body:
   - type: textarea
     id: environment
     attributes:
-      label: Environment
+      label: 環境
       description: App、OS、runtime、engine、hardware、networkのversionを含めてください。
     validations:
       required: true
@@ -40,32 +40,32 @@ body:
   - type: textarea
     id: steps
     attributes:
-      label: Reproduction steps
+      label: 再現手順
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
+      label: 期待する動作
     validations:
       required: true
 
   - type: textarea
     id: actual
     attributes:
-      label: Actual behavior
+      label: 実際の動作
     validations:
       required: true
 
   - type: textarea
     id: evidence
     attributes:
-      label: Logs, metrics, recordings
+      label: ログ、metrics、recording
       description: Secretを削除し、必要ならrecordingのhashと保管先を記載してください。
 
   - type: textarea
     id: regression
     attributes:
-      label: Regression information
+      label: Regression情報
       description: 最後に正常だったversionや変更が分かれば書いてください。

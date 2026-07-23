@@ -1,15 +1,15 @@
-# ADR 0003: FlatBuffers over UDP for real-time pose
+# ADR 0003: 実時間姿勢のFlatBuffers over UDP配信
 
 - Status: Accepted
 - Date: 2026-07-23
 
-## Context
+## 背景
 
 Windows BridgeからMac Hubへ、最大16台相当、60〜120Hzの姿勢を送ります。過去frameの完全配送より、最新姿勢と低いjitterを優先します。C++、Swift、C#、TypeScriptで同じdata modelを扱います。
 
 独自固定binaryは小さい一方、複数言語の手書きdecoderとschema evolutionが保守リスクになります。
 
-## Decision
+## 決定
 
 - pose dataはUDP unicast
 - payloadはFlatBuffers
@@ -20,7 +20,7 @@ Windows BridgeからMac Hubへ、最大16台相当、60〜120Hzの姿勢を送�
 - control/status commandはWebSocket + JSON
 - golden vectorsを全言語で共有
 
-## Alternatives considered
+## 検討した選択肢
 
 ### Hand-written fixed binary structs
 
@@ -42,22 +42,22 @@ JSONより小さく柔軟ですが、schema contractとcode generationが弱く�
 
 securityとconnection管理を統合できますが、MVPの実装・debug・platform差が大きいため延期します。
 
-## Consequences
+## 影響
 
-### Positive
+### 利点
 
 - 最新値優先がtransportと一致する
 - schema evolutionと多言語codegenを利用できる
 - packet captureとgolden testが可能
 - control pathとpose pathの障害を分離できる
 
-### Negative
+### 欠点
 
 - UDP loss、NAT/firewall、authをapplicationで扱う
 - FlatBuffers build/codegen dependencyが増える
 - batch欠落時のstate semanticsを実装する必要がある
 
-### Risks and mitigations
+### リスクと対策
 
 - Risk: IP fragmentation
   - Mitigation: 1,200-byte budgetとbatch split
@@ -68,14 +68,14 @@ securityとconnection管理を統合できますが、MVPの実装・debug・pla
 - Risk: generated-code drift
   - Mitigation: compiler pinとCI regeneration check
 
-## Validation
+## 検証
 
 - packet loss/reorder/duplicate tests
 - cross-language golden vectors
 - 16台×120Hz synthetic load
 - Wi‑Fi burst-loss test
 
-## Revisit when
+## 見直す条件
 
 - production networkがQUICを要求する
 - payload sizeまたはcodegenが支配的問題になる

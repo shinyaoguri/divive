@@ -1,30 +1,30 @@
-## Summary
+## 概要
 
 <!-- 何を変更したか。 -->
 
-## Why
+## 背景と目的
 
 <!-- なぜ必要か。関連IssueやADRをリンクしてください。 -->
 
-## Scope
+## 変更範囲
 
-### Included
-
--
-
-### Not included
+### 含むもの
 
 -
 
-## Validation
+### 含まないもの
+
+-
+
+## 検証
 
 <!-- 実行したtest、hardware run、manual checkと結果。 -->
 
-| Check | Environment | Result |
+| 確認項目 | 環境 | 結果 |
 | --- | --- | --- |
 |  |  |  |
 
-## Compatibility and operational impact
+## 互換性と運用への影響
 
 - Protocol/schema:
 - Recording:
@@ -33,7 +33,7 @@
 - Hardware/runtime:
 - Security:
 
-## Checklist
+## チェックリスト
 
 - [ ] Acceptance criteriaを満たした
 - [ ] 失敗経路を試験した

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that repository-local links in Markdown files resolve."""
+"""Markdown文書内のリポジトリローカルリンクが解決できることを検査する。"""
 
 from __future__ import annotations
 
@@ -51,12 +51,12 @@ def main() -> int:
                     )
 
     if failures:
-        print("Documentation link check failed:", file=sys.stderr)
+        print("ドキュメントのリンク検査に失敗しました:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
-    print(f"Checked {len(markdown_files)} Markdown files.")
+    print(f"{len(markdown_files)}個のMarkdownファイルを検査しました。")
     return 0
 
 

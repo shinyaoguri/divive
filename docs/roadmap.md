@@ -1,4 +1,4 @@
-# Roadmap
+# ロードマップ
 
 ## 方針
 
@@ -144,7 +144,7 @@ Windows上の取得経路を実測し、OpenVRとOpenXRの採用範囲を確定�
 - [ ] runtime再起動から自動復帰できる
 - [ ] LAN公開時の認証と鍵更新手順がある
 
-## Later
+## 将来候補
 
 - OSC adapter
 - shared memoryによるローカル配信
@@ -154,7 +154,7 @@ Windows上の取得経路を実測し、OpenVRとOpenXRの採用範囲を確定�
 - ヘルス監視の外部export
 - Linux Hub
 
-Later項目は、具体的な利用者と受入基準が定義されるまでMilestoneへ昇格させません。
+将来候補は、具体的な利用者と受入基準が定義されるまでMilestoneへ昇格させません。
 
 ## GitHubでの追跡
 

@@ -1,19 +1,19 @@
-# ADR 0000: Title
+# ADR 0000: タイトル
 
 - Status: Proposed
 - Date: YYYY-MM-DD
 - Owners:
 - Related issues:
 
-## Context
+## 背景
 
 どの問題を、どの制約の下で決める必要があるか。
 
-## Decision
+## 決定
 
 何を選ぶか。条件付きの場合は条件と停止基準を含める。
 
-## Alternatives considered
+## 検討した選択肢
 
 ### Alternative A
 
@@ -23,25 +23,25 @@
 
 利点、欠点、不採用理由。
 
-## Consequences
+## 影響
 
-### Positive
-
-- TBD
-
-### Negative
+### 利点
 
 - TBD
 
-### Risks and mitigations
+### 欠点
+
+- TBD
+
+### リスクと対策
 
 - Risk:
   - Mitigation:
 
-## Validation
+## 検証
 
 判断が正しいと確認するtest、metric、hardware run。
 
-## Revisit when
+## 見直す条件
 
 この判断を見直す条件。
