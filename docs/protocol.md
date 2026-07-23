@@ -117,6 +117,10 @@ envelopeを除いたFlatBuffers payload budgetは1,128 bytesです。
 
 batch内のTracker順序に意味を持たせません。
 
+C++ Bridge実装は、各Tracker追加後のFlatBuffers実payload長を使うgreedy分割を採用
+します。Tracker数だけからpacket長を推測しません。単体Trackerがpayload budgetを
+超える場合はsilent truncateせずframe生成errorとして可視化します。
+
 ## 順序制御
 
 Hubは`session_id + bridge_id`ごとにsequenceを管理します。

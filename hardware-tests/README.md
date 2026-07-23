@@ -29,7 +29,7 @@ New-Item -ItemType Directory -Force "$run\screenshots"
 [OpenVR実機検証probe](../bridge/probes/openvr/README.md)をbuildし、最初は全deviceを記録します。
 
 ```powershell
-.\dist\openvr-probe\divive-openvr-probe.exe `
+.\dist\windows-tools\divive-openvr-probe.exe `
   --all-devices `
   --rate 120 `
   --duration 60 `

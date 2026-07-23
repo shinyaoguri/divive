@@ -23,6 +23,9 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] C++ encoder/decoderとmacOS conformance test
 - [x] Swift receiverで同じgolden packetを検証
 - [x] SwiftNIO UDP receiverとlocalhost loopback test
+- [x] C++ UDP publisher、1,200-byte batch分割、simulated sender
+- [x] C++ sender → Swift receiverのlocalhost複数batch結合
+- [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
 sourceが完成してもM0は完了ではありません。Windows実機の証跡とGate判定が必要です。
@@ -152,11 +155,13 @@ flowchart TD
 
 ### C2. UDP publisher
 
-- unicast
-- frame/batch sequence
-- oversized datagram拒否
-- send error metrics
-- configurable 60 / 90 / 120Hz
+- [x] IPv4 / IPv6 hostnameを解決するUDP unicast
+- [x] frame sequenceとgreedy batch分割
+- [x] 1,200-byte超過datagramと単体oversized Trackerの拒否
+- [x] send error、byte数、deadline missの診断
+- [x] configurable 60 / 90 / 120Hzのsimulated sender
+- [ ] capture threadとsend thread間のbounded latest-value handoff
+- [ ] 実機backendのcanonical frameをpublisherへ接続
 
 ### C3. Control client
 

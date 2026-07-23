@@ -104,6 +104,7 @@ add_library(
     STATIC
     "${DIVIVE_PROTOCOL_GENERATED_HEADER}"
     src/envelope.cpp
+    src/frame_packetizer.cpp
     src/pose_codec.cpp
 )
 

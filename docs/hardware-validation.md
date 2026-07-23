@@ -105,7 +105,7 @@ Pass:
 推奨command:
 
 ```powershell
-.\dist\openvr-probe\divive-openvr-probe.exe `
+.\dist\windows-tools\divive-openvr-probe.exe `
   --trackers-only `
   --rate 120 `
   --duration 1800 `

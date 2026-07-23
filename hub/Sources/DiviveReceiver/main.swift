@@ -1,6 +1,7 @@
 import Dispatch
 import Foundation
 import HubNetworking
+import HubProtocol
 
 private struct Options {
   var host = "0.0.0.0"
@@ -64,39 +65,32 @@ private func printUsage() {
   )
 }
 
-do {
-  let options = try Options.parse(Array(CommandLine.arguments.dropFirst()))
-  let receiver = UDPReceiver()
-  let address = try receiver.start(
-    configuration: .init(host: options.host, port: options.port),
-    onPacket: { received in
-      guard options.printPose else { return }
-      let packet = received.packet
-      print(
-        "frame=\(packet.envelope.frameSequence) "
-          + "batch=\(packet.envelope.batchIndex + 1)/\(packet.envelope.batchCount) "
-          + "trackers=\(packet.poseBatch.trackers.count) "
-          + "processing_us=\(received.processingTimeNS / 1_000)"
-      )
-    },
-    onDecodeError: { error in
-      fputs("packetを拒否しました: \(error)\n", stderr)
-    }
-  )
+/// NIO event loopとDispatch workerから呼ばれる処理をMainActorから分離する。
+private final class ConsoleReporter: @unchecked Sendable {
+  private let receiver: UDPReceiver
+  private let printPose: Bool
 
-  print("divive-receiverを開始しました: \(address)")
-  print("終了するにはControl-Cを押してください")
-
-  signal(SIGINT, SIG_IGN)
-  let interruptSource = DispatchSource.makeSignalSource(signal: SIGINT)
-  interruptSource.setEventHandler {
-    try? receiver.close()
+  init(receiver: UDPReceiver, printPose: Bool) {
+    self.receiver = receiver
+    self.printPose = printPose
   }
-  interruptSource.resume()
 
-  let metricsTimer = DispatchSource.makeTimerSource()
-  metricsTimer.schedule(deadline: .now() + 1, repeating: 1)
-  metricsTimer.setEventHandler {
+  func receive(_ received: ReceivedPosePacket) {
+    guard printPose else { return }
+    let packet = received.packet
+    print(
+      "frame=\(packet.envelope.frameSequence) "
+        + "batch=\(packet.envelope.batchIndex + 1)/\(packet.envelope.batchCount) "
+        + "trackers=\(packet.poseBatch.trackers.count) "
+        + "processing_us=\(received.processingTimeNS / 1_000)"
+    )
+  }
+
+  func reject(_ error: PacketDecodeError) {
+    fputs("packetを拒否しました: \(error)\n", stderr)
+  }
+
+  func printStatistics() {
     let stats = receiver.statistics()
     print(
       "received=\(stats.datagrams) valid=\(stats.validPackets) "
@@ -105,6 +99,33 @@ do {
         + "out_of_order=\(stats.outOfOrderPackets)"
     )
   }
+
+  func stop() {
+    try? receiver.close()
+  }
+}
+
+do {
+  let options = try Options.parse(Array(CommandLine.arguments.dropFirst()))
+  let receiver = UDPReceiver()
+  let reporter = ConsoleReporter(receiver: receiver, printPose: options.printPose)
+  let address = try receiver.start(
+    configuration: .init(host: options.host, port: options.port),
+    onPacket: reporter.receive,
+    onDecodeError: reporter.reject
+  )
+
+  print("divive-receiverを開始しました: \(address)")
+  print("終了するにはControl-Cを押してください")
+
+  signal(SIGINT, SIG_IGN)
+  let interruptSource = DispatchSource.makeSignalSource(signal: SIGINT)
+  interruptSource.setEventHandler(handler: reporter.stop)
+  interruptSource.resume()
+
+  let metricsTimer = DispatchSource.makeTimerSource()
+  metricsTimer.schedule(deadline: .now() + 1, repeating: 1)
+  metricsTimer.setEventHandler(handler: reporter.printStatistics)
   metricsTimer.resume()
 
   try receiver.waitUntilClosed()
