@@ -1,4 +1,5 @@
 import Foundation
+import HubCore
 import HubNetworking
 import NIOCore
 import NIOPosix
@@ -7,11 +8,16 @@ import XCTest
 final class UDPReceiverTests: XCTestCase {
   func testLoopbackでgoldenPacketを受信する() throws {
     let receiver = UDPReceiver()
+    let hubState = HubStateStore()
     let received = expectation(description: "golden packetを受信")
     let address = try receiver.start(
       configuration: .init(host: "127.0.0.1", port: 0),
       onPacket: { packet in
         XCTAssertEqual(packet.packet.poseBatch.trackers.count, 2)
+        hubState.ingest(
+          packet.packet,
+          receivedMonotonicNS: packet.receivedMonotonicNS
+        )
         received.fulfill()
       }
     )
@@ -37,6 +43,11 @@ final class UDPReceiverTests: XCTestCase {
     XCTAssertEqual(statistics.appliedPackets, 1)
     XCTAssertEqual(statistics.trackerRecords, 2)
     XCTAssertEqual(statistics.invalidPackets, 0)
+
+    let state = hubState.snapshot()
+    XCTAssertEqual(state.generation, 1)
+    XCTAssertEqual(state.stateStatistics.completeFrames, 1)
+    XCTAssertEqual(state.trackers.count, 2)
   }
 
   private func goldenPacket() throws -> [UInt8] {

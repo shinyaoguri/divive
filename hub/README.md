@@ -12,7 +12,9 @@ UDP datagram
   → FlatBuffers verifier
   → canonical Swift model
   → Bridge/session単位のsequence・batch判定
-  → CLI callbackと受信metrics
+  → Bridgeごとに最大1つのframeを再構成
+  → latest Bridge / Tracker state
+  → CLI snapshotと受信metrics
 ```
 
 Packageは次の責務に分けています。
@@ -21,10 +23,18 @@ Packageは次の責務に分けています。
 | --- | --- |
 | `HubProtocol` | wire decode、canonical model、sequence/batch判定 |
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
+| `HubCore` | 複数batch再構成、partial frame確定、latest state |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 
 `HubProtocol`はSwiftNIOへ依存しません。今後のSimulatorとPlaybackも、decode後の
-canonical modelから同じHubCore入力へ接続します。
+canonical modelから`HubStateStore.apply()`へ接続できます。
+
+`HubCore`はBridgeごとに未完成frameを最大1つだけ保持します。全batchが到着すれば
+直ちにcomplete frameを確定し、欠落時は次sequenceまたはsession切替時にpartial
+frameとして確定します。partial frameに含まれないTrackerは前回値と更新時刻を保持
+します。sessionまたはtracking spaceが変わった場合は、古いTracker stateを混在
+させません。consumerはthread-safeなsnapshot、Bridge ID、または
+`TrackerKey(bridgeID, trackerID)`から最新値を取得できます。
 
 ## 必要環境
 
@@ -51,6 +61,8 @@ testは次を含みます。
 - C++と共通の`protocol/golden/pose_v1.packet.hex`のdecode
 - envelopeおよびFlatBuffers破損packetの拒否
 - loss、duplicate、out-of-order、session変更、batch欠落の分類
+- batch到着順、partial確定、metadata矛盾、Tracker ID重複
+- latest state、前回値保持、session / tracking space reset
 - 実UDP socketを使うlocalhost loopback
 
 ## CLI
@@ -61,7 +73,8 @@ swift run divive-receiver --bind 0.0.0.0 --port 41320
 ```
 
 姿勢をpacketごとに確認するときだけ`--print-pose`を追加します。通常ログへ毎frameの
-姿勢を出さず、1秒ごとの集計値だけを表示します。
+姿勢を出さず、1秒ごとに受信数、確定frame数、partial frame数、pending frame数、
+latest Tracker数を表示します。
 
 `0.0.0.0` bindはWindows Bridgeから到達させるためのCLI既定値です。現段階ではHMACと
 allowlistがないため、信頼できるprivate LANでのみ使い、macOS firewallでも受信元を
@@ -90,10 +103,10 @@ commit済みbindingのbyte一致を検査します。
 ## M1で意図的に残す制約
 
 - NIO `ByteBuffer`からFlatBuffers runtimeへ渡す際にpacketごとに1回copyする
-- 同一frameの複数batchは順序判定するが、完全なframeへの再構成はHubCoreで実装する
 - BridgeとHubのmonotonic clock offsetは未推定のため、one-way latencyを断定しない
 - HMAC、sender allowlist、control channelは未実装
-- GUI、calibration、最新Tracker state、content配信は未実装
+- ageに基づくlost / disconnected状態遷移は未実装
+- GUI、calibration、role永続化、content配信は未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる
 ことを先に固定します。copy最適化は受信処理時間の計測結果を見て判断します。

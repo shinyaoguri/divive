@@ -10,6 +10,7 @@ let package = Package(
   products: [
     .library(name: "HubProtocol", targets: ["HubProtocol"]),
     .library(name: "HubNetworking", targets: ["HubNetworking"]),
+    .library(name: "HubCore", targets: ["HubCore"]),
     .executable(name: "divive-receiver", targets: ["DiviveReceiver"]),
   ],
   dependencies: [
@@ -37,9 +38,13 @@ let package = Package(
         .product(name: "NIOPosix", package: "swift-nio"),
       ]
     ),
+    .target(
+      name: "HubCore",
+      dependencies: ["HubProtocol"]
+    ),
     .executableTarget(
       name: "DiviveReceiver",
-      dependencies: ["HubNetworking", "HubProtocol"]
+      dependencies: ["HubCore", "HubNetworking", "HubProtocol"]
     ),
     .testTarget(
       name: "HubProtocolTests",
@@ -48,11 +53,16 @@ let package = Package(
     .testTarget(
       name: "HubNetworkingTests",
       dependencies: [
+        "HubCore",
         "HubNetworking",
         "HubProtocol",
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOPosix", package: "swift-nio"),
       ]
+    ),
+    .testTarget(
+      name: "HubCoreTests",
+      dependencies: ["HubCore", "HubProtocol"]
     ),
   ]
 )
