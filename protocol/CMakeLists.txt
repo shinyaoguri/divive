@@ -1,4 +1,5 @@
 include(FetchContent)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # compilerとruntimeを同じreleaseへ固定する。FlatBuffersはcalendar versioningを使う。
 set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -40,6 +41,61 @@ add_custom_command(
         "${DIVIVE_PROTOCOL_SCHEMA}"
     DEPENDS flatc "${DIVIVE_PROTOCOL_SCHEMA}"
     COMMENT "FlatBuffers C++ bindingを生成"
+    VERBATIM
+)
+
+set(
+    DIVIVE_PROTOCOL_SWIFT_GENERATED_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/swift"
+)
+set(
+    DIVIVE_PROTOCOL_SWIFT_GENERATED_SOURCE
+    "${DIVIVE_PROTOCOL_SWIFT_GENERATED_DIR}/pose_generated.swift"
+)
+set(
+    DIVIVE_PROTOCOL_SWIFT_COMMITTED_SOURCE
+    "${CMAKE_SOURCE_DIR}/hub/Sources/HubProtocol/Generated/pose_generated.swift"
+)
+set(
+    DIVIVE_PROTOCOL_SWIFT_NORMALIZER
+    "${CMAKE_SOURCE_DIR}/scripts/normalize_generated_swift.py"
+)
+
+add_custom_command(
+    OUTPUT "${DIVIVE_PROTOCOL_SWIFT_GENERATED_SOURCE}"
+    COMMAND
+        "${CMAKE_COMMAND}"
+        -E
+        make_directory
+        "${DIVIVE_PROTOCOL_SWIFT_GENERATED_DIR}"
+    COMMAND
+        "$<TARGET_FILE:flatc>"
+        --swift
+        -o
+        "${DIVIVE_PROTOCOL_SWIFT_GENERATED_DIR}"
+        "${DIVIVE_PROTOCOL_SCHEMA}"
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${DIVIVE_PROTOCOL_SWIFT_NORMALIZER}"
+        "${DIVIVE_PROTOCOL_SWIFT_GENERATED_SOURCE}"
+    DEPENDS
+        flatc
+        "${DIVIVE_PROTOCOL_SCHEMA}"
+        "${DIVIVE_PROTOCOL_SWIFT_NORMALIZER}"
+    COMMENT "FlatBuffers Swift bindingを生成"
+    VERBATIM
+)
+
+add_custom_target(
+    divive_protocol_swift_codegen_check
+    COMMAND
+        "${CMAKE_COMMAND}"
+        -E
+        compare_files
+        "${DIVIVE_PROTOCOL_SWIFT_GENERATED_SOURCE}"
+        "${DIVIVE_PROTOCOL_SWIFT_COMMITTED_SOURCE}"
+    DEPENDS "${DIVIVE_PROTOCOL_SWIFT_GENERATED_SOURCE}"
+    COMMENT "commit済みSwift bindingの生成差分を検査"
     VERBATIM
 )
 

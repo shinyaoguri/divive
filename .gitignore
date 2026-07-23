@@ -1,5 +1,6 @@
 /build/
 /dist/
+/hub/.build/
 /CMakeUserPresets.json
 
 # 実機のraw logとscreenshotはGitへ直接commitしない。
