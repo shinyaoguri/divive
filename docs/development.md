@@ -50,13 +50,18 @@ Candidate libraries:
 
 ### Hub
 
-- current supported Xcode/Swift
+- Swift 6.1以上
+- macOS 14以上
 - SwiftUI
 - RealityKit
 - Swift Package Manager
-- SwiftNIO
+- SwiftNIO 2.101.3
 - FlatBuffers Swift
+  `03fffb25e2d777462b719cb4964249c30b19d58f`
 - MCAP Swift
+
+現在のheadless receiverは[Hub README](../hub/README.md)を参照してください。
+SwiftPMの直接依存と推移依存は`hub/Package.resolved`で固定します。
 
 ### SDKs
 

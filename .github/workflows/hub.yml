@@ -1,0 +1,30 @@
+name: Hub
+
+on:
+  pull_request:
+    paths:
+      - "hub/**"
+      - "protocol/**"
+      - ".github/workflows/hub.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "hub/**"
+      - "protocol/**"
+      - ".github/workflows/hub.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  swift:
+    name: macOS Swift receiver
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Buildとtest
+        run: swift test --package-path hub

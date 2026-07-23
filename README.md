@@ -113,6 +113,10 @@ M0と並行可能な[wire protocol v1](protocol/README.md)は実装済みです�
 envelope、FlatBuffers schema、C++ codec、golden packetをprotocol conformance
 testで固定しています。
 
+[Mac Hub headless receiver](hub/README.md)は、同じgolden packetのSwift decode、
+sequence/loss判定、SwiftNIO UDP受信、CLI診断まで実装済みです。Windows Bridgeとの
+実機vertical slice、Hub state、GUI、content配信はまだ含みません。
+
 ## ライセンス
 
 未決定です。外部公開や第三者への配布前に決定します。

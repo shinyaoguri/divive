@@ -21,7 +21,9 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] B0 canonical pose modelをFlatBuffers schemaとして固定
 - [x] B1 72-byte envelope、64-bit sequence、golden packetを実装
 - [x] C++ encoder/decoderとmacOS conformance test
-- [ ] Swift receiverで同じgolden packetを検証
+- [x] Swift receiverで同じgolden packetを検証
+- [x] SwiftNIO UDP receiverとlocalhost loopback test
+- [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
 sourceが完成してもM0は完了ではありません。Windows実機の証跡とGate判定が必要です。
 
@@ -179,6 +181,10 @@ HubNetworking
 HubRecorder
 HubSimulator
 ```
+
+現在は`HubProtocol`、`HubNetworking`、`divive-receiver`まで実装済みです。
+`HubProtocol`はnetwork runtimeから独立させ、C++と共通のgolden packetで検証します。
+HubCoreのlatest state、frame再構成、calibrationは次の段階で追加します。
 
 ### D1. Ingest pipeline
 
