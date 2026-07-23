@@ -1,16 +1,22 @@
+#include "divive/bridge/latest_value_mailbox.hpp"
+#include "divive/bridge/pose_sender.hpp"
 #include "divive/bridge/sender_options.hpp"
 #include "divive/bridge/udp_publisher.hpp"
 
 #include "divive/protocol/envelope.hpp"
+#include "divive/protocol/pose_codec.hpp"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <future>
 #include <iostream>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -165,6 +171,70 @@ class LoopbackReceiver {
 #endif
 };
 
+[[nodiscard]] divive::protocol::UuidBytes uuid(const std::byte value) {
+    divive::protocol::UuidBytes result{};
+    result.fill(value);
+    return result;
+}
+
+[[nodiscard]] divive::protocol::PoseBatch test_pose_batch() {
+    divive::protocol::PoseBatch batch;
+    batch.tracking_space_id = uuid(std::byte{3});
+    batch.space_epoch = 1;
+    batch.capture_monotonic_ns = divive::bridge::monotonic_now_ns();
+    batch.requested_rate_hz = 90;
+    batch.backend = divive::protocol::Backend::simulator;
+
+    divive::protocol::TrackerPose tracker;
+    tracker.tracker_id = "simulated/test";
+    tracker.id_kind = divive::protocol::TrackerIdKind::session;
+    tracker.role = "waist";
+    tracker.position = {.x = 1.0F, .y = 2.0F, .z = -3.0F};
+    tracker.orientation = {.x = 0.0F, .y = 0.0F, .z = 0.0F, .w = 1.0F};
+    tracker.tracking_state = divive::protocol::TrackingState::simulated;
+    tracker.tracking_reason = divive::protocol::TrackingReason::none;
+    tracker.connected = true;
+    batch.trackers.push_back(std::move(tracker));
+    return batch;
+}
+
+void test_latest_value_mailbox() {
+    constexpr std::string_view name = "latest value mailbox";
+    divive::bridge::LatestValueMailbox<int> mailbox;
+
+    CHECK(name,
+          mailbox.publish(1) == divive::bridge::LatestValuePublishResult::accepted);
+    CHECK(name,
+          mailbox.publish(2) == divive::bridge::LatestValuePublishResult::overwritten);
+    const auto before_take = mailbox.stats();
+    CHECK(name, before_take.published == 2U);
+    CHECK(name, before_take.consumed == 0U);
+    CHECK(name, before_take.overwritten == 1U);
+    CHECK(name, before_take.has_pending_value);
+
+    mailbox.close();
+    const auto latest = mailbox.wait_take();
+    CHECK(name, latest.has_value());
+    CHECK(name, latest == 2);
+    CHECK(name, !mailbox.wait_take().has_value());
+    CHECK(name, mailbox.publish(3) == divive::bridge::LatestValuePublishResult::closed);
+
+    const auto final_stats = mailbox.stats();
+    CHECK(name, final_stats.published == 2U);
+    CHECK(name, final_stats.consumed == 1U);
+    CHECK(name, final_stats.overwritten == 1U);
+    CHECK(name, final_stats.closed);
+
+    divive::bridge::LatestValueMailbox<int> blocking;
+    auto waiting = std::async(std::launch::async,
+                              [&blocking] { return blocking.wait_take().has_value(); });
+    CHECK(name, waiting.wait_for(std::chrono::milliseconds(20)) ==
+                    std::future_status::timeout);
+    blocking.close();
+    CHECK(name, waiting.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    CHECK(name, !waiting.get());
+}
+
 void test_sender_options() {
     constexpr std::string_view name = "sender options";
     const auto defaults =
@@ -198,6 +268,83 @@ void test_sender_options() {
     CHECK(name, !divive::bridge::parse_sender_options(
                      std::vector<std::string_view>{"--unknown", "1"})
                      .options.has_value());
+}
+
+void test_pose_sender_loopback() {
+    constexpr std::string_view name = "pose sender loopback";
+    LoopbackReceiver receiver;
+    CHECK(name, receiver.is_open());
+    if (!receiver.is_open()) {
+        return;
+    }
+
+    divive::bridge::PoseSender sender;
+    CHECK(name, sender.submit(test_pose_batch()) ==
+                    divive::bridge::PoseSenderSubmitResult::not_running);
+
+    divive::bridge::PoseSenderConfig config;
+    config.publisher.destination_host = "127.0.0.1";
+    config.publisher.destination_port = receiver.port();
+    config.envelope.session_id = uuid(std::byte{1});
+    config.envelope.bridge_id = uuid(std::byte{2});
+    config.envelope.frame_sequence = 42;
+
+    const auto started = sender.start(config);
+    CHECK(name, static_cast<bool>(started));
+    CHECK(name, sender.is_running());
+    if (!started) {
+        return;
+    }
+
+    const auto submitted = sender.submit(test_pose_batch());
+    CHECK(name, submitted == divive::bridge::PoseSenderSubmitResult::accepted ||
+                    submitted == divive::bridge::PoseSenderSubmitResult::overwritten);
+    sender.stop();
+    CHECK(name, !sender.is_running());
+
+    const auto datagram = receiver.receive();
+    CHECK(name, !datagram.empty());
+    const auto parsed = divive::protocol::parse_packet(datagram);
+    CHECK(name, static_cast<bool>(parsed));
+    if (!parsed) {
+        return;
+    }
+    CHECK(name, parsed.packet->envelope.frame_sequence == 42U);
+
+    const auto decoded = divive::protocol::decode_pose_batch(parsed.packet->payload);
+    CHECK(name, static_cast<bool>(decoded));
+    if (decoded) {
+        CHECK(name,
+              decoded.batch->send_monotonic_ns >= decoded.batch->capture_monotonic_ns);
+        CHECK(name, decoded.batch->trackers.size() == 1U);
+        CHECK(name, decoded.batch->trackers[0].tracker_id == "simulated/test");
+    }
+
+    const auto stats = sender.stats();
+    CHECK(name, stats.submitted_frames == 1U);
+    CHECK(name, stats.sent_frames == 1U);
+    CHECK(name, stats.sent_datagrams == 1U);
+    CHECK(name, stats.last_error == divive::bridge::PoseSenderRuntimeError::none);
+
+    divive::bridge::PoseSender invalid;
+    CHECK(name, invalid.start({}).error ==
+                    divive::bridge::PoseSenderStartError::invalid_identity);
+
+    divive::bridge::PoseSender failing;
+    CHECK(name, static_cast<bool>(failing.start(config)));
+    auto invalid_batch = test_pose_batch();
+    invalid_batch.tracking_space_id = {};
+    CHECK(name, failing.submit(std::move(invalid_batch)) ==
+                    divive::bridge::PoseSenderSubmitResult::accepted);
+    failing.stop();
+    const auto failure_stats = failing.stats();
+    CHECK(name, failure_stats.sent_frames == 0U);
+    CHECK(name, failure_stats.last_error ==
+                    divive::bridge::PoseSenderRuntimeError::packetize_failed);
+    CHECK(name, failure_stats.packetizer_error ==
+                    divive::protocol::FramePacketizerError::pose_codec_error);
+    CHECK(name, failure_stats.pose_codec_error ==
+                    divive::protocol::PoseCodecError::nil_tracking_space_id);
 }
 
 void test_udp_loopback() {
@@ -242,7 +389,9 @@ void test_udp_loopback() {
 } // namespace
 
 int main() {
+    test_latest_value_mailbox();
     test_sender_options();
+    test_pose_sender_loopback();
     test_udp_loopback();
 
     if (failures == 0) {

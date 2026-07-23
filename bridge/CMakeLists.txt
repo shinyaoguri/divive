@@ -18,9 +18,12 @@ target_include_directories(
 divive_enable_warnings(divive_probe_core)
 
 if(DIVIVE_BUILD_PROTOCOL)
+    find_package(Threads REQUIRED)
+
     add_library(
         divive_bridge_transport
         STATIC
+        src/pose_sender.cpp
         src/sender_options.cpp
         src/udp_publisher.cpp
     )
@@ -31,7 +34,12 @@ if(DIVIVE_BUILD_PROTOCOL)
         PUBLIC
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
-    target_link_libraries(divive_bridge_transport PUBLIC divive_protocol)
+    target_link_libraries(
+        divive_bridge_transport
+        PUBLIC
+            divive_protocol
+            Threads::Threads
+    )
     if(WIN32)
         target_link_libraries(divive_bridge_transport PRIVATE ws2_32)
     endif()

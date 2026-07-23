@@ -63,7 +63,7 @@ UDP datagramは72-byte固定長envelopeとFlatBuffers payloadで構成します�
 | 14 | 2 | batch count | 同一frameの分割 |
 | 16 | 16 | session ID | Bridge process/session |
 | 32 | 16 | bridge ID | Bridge identity |
-| 48 | 8 | frame sequence | capture frameの単調増加番号 |
+| 48 | 8 | frame sequence | 実際に送信するframeの単調増加番号 |
 | 56 | 16 | auth tag | 将来のtruncated HMAC |
 
 数値はnetwork byte orderとし、C/C++ structのmemory layoutをそのまま送信しません。
@@ -134,6 +134,12 @@ Hubは`session_id + bridge_id`ごとにsequenceを管理します。
 sequenceは64-bit unsigned integerとします。session変更時に比較windowを
 リセットするため、通常運用でのwrap-around処理は不要です。
 
+Bridgeのcapture threadと送信threadの間はcapacity 1のlatest-value mailboxです。
+送信がcaptureに追いつかない場合、まだ送信していない古いframeを上書きします。
+`frame_sequence`は送信threadが選択したframeだけに連番を付けるため、送信前の
+上書きをHubのpacket lossと誤認しません。上書き数はBridge側の
+`overwritten_frames`として別に観測します。
+
 ## 時刻
 
 ### Clock domain
@@ -163,6 +169,7 @@ WebSocket/TCPを使う場合も、application semanticsはlatest valueです。
 
 - clientごとにpose backlogを無制限に持たない
 - 未送信pose frameは新しいframeで置換できる
+- capture threadは同期socket I/Oやpacketizeを行わない
 - control response、state transition、recording commandは置換しない
 - p5.js clientはmessage handlerでlatest stateを更新し、`draw()`で読む
 
