@@ -67,6 +67,8 @@ raw logにsecretや個人情報を含めません。大きなrecordingはGitへ�
 
 ## Gate検証
 
+M0のH0〜H6では[OpenVR実機検証probe](../bridge/probes/openvr/README.md)と[実機検証template](../hardware-tests/README.md)を使用します。
+
 ### H0: Runtime inventory
 
 **Question:** runtimeとdeviceがWindowsからどう見えるか。
@@ -99,6 +101,17 @@ Pass:
 
 - 再起動を含む3回の試行で同じ手順が再現する
 - 30分以上valid poseを継続取得する
+
+推奨command:
+
+```powershell
+.\dist\openvr-probe\divive-openvr-probe.exe `
+  --trackers-only `
+  --rate 120 `
+  --duration 1800 `
+  --prediction-seconds 0 `
+  --output tracker3-h1-30m.jsonl
+```
 
 Fail/stop:
 

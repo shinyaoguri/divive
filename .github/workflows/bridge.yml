@@ -1,0 +1,58 @@
+name: Bridge
+
+on:
+  pull_request:
+    paths:
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "bridge/**"
+      - ".github/workflows/bridge.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "bridge/**"
+      - ".github/workflows/bridge.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  macos-core:
+    name: macOS probe core
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: CMakeを設定
+        run: cmake --preset macos-debug
+      - name: Build
+        run: cmake --build --preset macos-debug
+      - name: Test
+        run: ctest --preset macos-debug
+
+  windows-probe:
+    name: Windows OpenVR probe
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: CMakeを設定
+        run: cmake --preset windows-release
+      - name: Build
+        run: cmake --build --preset windows-release
+      - name: Test
+        run: ctest --preset windows-release
+      - name: 配布物を作成
+        run: >
+          cmake --install build/windows-release
+          --config Release
+          --prefix dist/openvr-probe
+      - name: Probe artifactを保存
+        uses: actions/upload-artifact@v4
+        with:
+          name: divive-openvr-probe-windows-x64
+          path: dist/openvr-probe
+          if-no-files-found: error
