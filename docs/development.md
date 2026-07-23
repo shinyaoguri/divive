@@ -48,6 +48,11 @@ Candidate libraries:
 
 依存を追加するPRでは、ライセンス、version pin、更新方法を記録します。
 
+UDP publisherは標準C++にsocket APIがないため、WindowsではWinsock2、macOS/Linuxの
+unit testではPOSIX socketを薄いRAII wrapperから利用します。現段階の同期`sendto`は
+dedicated send側で使う前提です。capture threadから直接呼ばず、C1でbounded
+latest-value handoffを追加します。
+
 ### Hub
 
 - Swift 6.1以上

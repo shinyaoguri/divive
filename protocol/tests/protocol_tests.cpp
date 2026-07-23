@@ -1,6 +1,7 @@
 #include "golden_fixture.hpp"
 
 #include "divive/protocol/envelope.hpp"
+#include "divive/protocol/frame_packetizer.hpp"
 #include "divive/protocol/pose_codec.hpp"
 
 #include <algorithm>
@@ -304,6 +305,80 @@ void test_golden_packet() {
     CHECK(name, to_hex(built.packet) == expected);
 }
 
+void test_frame_packetizer() {
+    constexpr std::string_view name = "frame packetizer";
+    auto frame = divive::protocol::test::golden_pose_batch();
+    const auto envelope = divive::protocol::test::golden_envelope();
+
+    const auto single = divive::protocol::packetize_pose_frame(envelope, frame);
+    CHECK(name, static_cast<bool>(single));
+    CHECK(name, single.datagrams.size() == 1U);
+    if (!single || single.datagrams.empty()) {
+        return;
+    }
+    const auto single_parsed = divive::protocol::parse_packet(single.datagrams[0]);
+    CHECK(name, static_cast<bool>(single_parsed));
+    if (!single_parsed) {
+        return;
+    }
+    CHECK(name, single_parsed.packet->envelope.batch_index == 0U);
+    CHECK(name, single_parsed.packet->envelope.batch_count == 1U);
+
+    auto empty = frame;
+    empty.trackers.clear();
+    const auto empty_packetized =
+        divive::protocol::packetize_pose_frame(envelope, empty);
+    CHECK(name, static_cast<bool>(empty_packetized));
+    CHECK(name, empty_packetized.datagrams.size() == 1U);
+
+    const auto source_trackers = frame.trackers;
+    for (std::size_t index = 0; index < 24U; ++index) {
+        auto tracker = source_trackers[index % source_trackers.size()];
+        tracker.tracker_id += "/" + std::to_string(index);
+        tracker.role += std::string(80U, static_cast<char>('a' + (index % 26U)));
+        frame.trackers.push_back(std::move(tracker));
+    }
+
+    const auto split = divive::protocol::packetize_pose_frame(envelope, frame);
+    CHECK(name, static_cast<bool>(split));
+    CHECK(name, split.datagrams.size() > 1U);
+
+    std::vector<std::string> decoded_ids;
+    for (std::size_t index = 0; index < split.datagrams.size(); ++index) {
+        const auto& datagram = split.datagrams[index];
+        CHECK(name, datagram.size() <= divive::protocol::kMaxDatagramSize);
+        const auto parsed = divive::protocol::parse_packet(datagram);
+        CHECK(name, static_cast<bool>(parsed));
+        if (!parsed) {
+            continue;
+        }
+        CHECK(name, parsed.packet->envelope.frame_sequence == envelope.frame_sequence);
+        CHECK(name, parsed.packet->envelope.batch_index == index);
+        CHECK(name, parsed.packet->envelope.batch_count == split.datagrams.size());
+        const auto decoded =
+            divive::protocol::decode_pose_batch(parsed.packet->payload);
+        CHECK(name, static_cast<bool>(decoded));
+        if (!decoded) {
+            continue;
+        }
+        for (const auto& tracker : decoded.batch->trackers) {
+            decoded_ids.push_back(tracker.tracker_id);
+        }
+    }
+    CHECK(name, decoded_ids.size() == frame.trackers.size());
+    if (decoded_ids.size() == frame.trackers.size()) {
+        for (std::size_t index = 0; index < decoded_ids.size(); ++index) {
+            CHECK(name, decoded_ids[index] == frame.trackers[index].tracker_id);
+        }
+    }
+
+    auto oversized = divive::protocol::test::golden_pose_batch();
+    oversized.trackers.resize(1U);
+    oversized.trackers[0].tracker_id = std::string(2'000U, 'x');
+    CHECK(name, divive::protocol::packetize_pose_frame(envelope, oversized).error ==
+                    divive::protocol::FramePacketizerError::tracker_too_large);
+}
+
 } // namespace
 
 int main() {
@@ -313,6 +388,7 @@ int main() {
     test_semantic_rejection();
     test_size_budget();
     test_golden_packet();
+    test_frame_packetizer();
 
     if (failures == 0) {
         std::cout << "すべてのprotocol testが成功しました。\n";

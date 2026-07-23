@@ -59,6 +59,21 @@ FlatBuffers verifierを使い、認証が必要な運用では将来のHMACを�
 UUIDはschema内ではbig-endianの32-bit word 4個として定義します。言語runtimeが
 FlatBuffers scalarのbyte orderを処理した後、RFC 4122の16-byte列へ復元します。
 
+## Frame packetizer
+
+C++の`packetize_pose_frame`は入力Tracker順を保つgreedy分割を行います。各候補batchを
+実際にFlatBuffers encodeして1,128-byte payload budgetへ収まるか判定するため、
+文字列長やoptional fieldを固定長と仮定しません。
+
+- Tracker 0件でもframe metadataを伝える1 batchを生成
+- 全batchで同じsession、bridge、frame sequence、capture/send timeを維持
+- `batch_index`と`batch_count`はpacketizerが上書き
+- Tracker 1件だけで上限を超える場合はframe全体を拒否
+- 分割後の各datagramを再度envelope encoderで検証
+
+MVPの最大16台ではgreedy encodeの計算量より、実際のwire sizeと上限が一致することを
+優先します。profile結果で必要になった場合にbuilder再利用を最適化します。
+
 ## FlatBuffers pin
 
 - Release: `v25.12.19-2026-02-06-03fffb2`

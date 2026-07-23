@@ -56,7 +56,7 @@ build/windows-release/bridge/probes/openvr/Release/
 ```powershell
 cmake --install build/windows-release `
   --config Release `
-  --prefix dist/openvr-probe
+  --prefix dist/windows-tools
 ```
 
 ## 基本実行
@@ -64,7 +64,7 @@ cmake --install build/windows-release `
 全deviceを30秒記録:
 
 ```powershell
-.\dist\openvr-probe\divive-openvr-probe.exe `
+.\dist\windows-tools\divive-openvr-probe.exe `
   --rate 120 `
   --duration 30 `
   --origin standing `
@@ -74,7 +74,7 @@ cmake --install build/windows-release `
 Generic Trackerだけを30分記録:
 
 ```powershell
-.\dist\openvr-probe\divive-openvr-probe.exe `
+.\dist\windows-tools\divive-openvr-probe.exe `
   --trackers-only `
   --rate 120 `
   --duration 1800 `
@@ -86,7 +86,7 @@ Generic Trackerだけを30分記録:
 `--duration 0`はCtrl+Cまで実行します。全optionは次で確認できます。
 
 ```powershell
-.\dist\openvr-probe\divive-openvr-probe.exe --help
+.\dist\windows-tools\divive-openvr-probe.exe --help
 ```
 
 ## JSONL event

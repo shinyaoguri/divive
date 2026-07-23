@@ -117,6 +117,10 @@ testで固定しています。
 sequence/loss判定、SwiftNIO UDP受信、CLI診断まで実装済みです。Windows Bridgeとの
 実機vertical slice、Hub state、GUI、content配信はまだ含みません。
 
+[UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
+publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
+送信を検証します。実機姿勢との結合はM0 backend判定後に行います。
+
 ## ライセンス
 
 未決定です。外部公開や第三者への配布前に決定します。
