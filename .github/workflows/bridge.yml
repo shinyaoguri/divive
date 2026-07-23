@@ -35,7 +35,9 @@ jobs:
 
   windows-probe:
     name: Windows OpenVR probe
-    runs-on: windows-latest
+    # CMakePresets.jsonで指定したVisual Studio 2022と揃える。
+    # windows-latestはVisual Studio 2026へ移行済みのため固定する。
+    runs-on: windows-2022
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
