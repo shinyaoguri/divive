@@ -147,11 +147,11 @@ flowchart TD
 
 ### C1. Capture loop
 
-- dedicated thread
-- allocation済みframe bufferの再利用
-- backend pollとnetwork sendの責務分離
-- bounded latest-value handoff
-- runtime切断時の指数backoff
+- [x] dedicated network send thread
+- [ ] allocation済みframe bufferの再利用
+- [x] backend pollとnetwork sendの責務分離
+- [x] capacity 1のbounded latest-value handoff
+- [ ] runtime切断時の指数backoff
 
 ### C2. UDP publisher
 
@@ -160,7 +160,7 @@ flowchart TD
 - [x] 1,200-byte超過datagramと単体oversized Trackerの拒否
 - [x] send error、byte数、deadline missの診断
 - [x] configurable 60 / 90 / 120Hzのsimulated sender
-- [ ] capture threadとsend thread間のbounded latest-value handoff
+- [x] capture threadとsend thread間のbounded latest-value handoff
 - [ ] 実機backendのcanonical frameをpublisherへ接続
 
 ### C3. Control client

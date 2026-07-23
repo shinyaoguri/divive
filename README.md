@@ -119,7 +119,8 @@ sequence/loss判定、SwiftNIO UDP受信、CLI診断まで実装済みです。W
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
-送信を検証します。実機姿勢との結合はM0 backend判定後に行います。
+送信を検証します。captureと同期socket I/Oはcapacity 1のlatest-value handoffで
+分離済みです。実機姿勢との結合はM0 backend判定後に行います。
 
 ## ライセンス
 

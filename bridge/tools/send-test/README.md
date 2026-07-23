@@ -35,6 +35,22 @@ Macだけで疎通を確認する場合:
 Tracker順を保った複数batchへ分割します。receiverは同一frameの未着batchを待たず、
 次のframe到着時に欠落を確定します。
 
+capture loopはcapacity 1のlatest-value mailboxへ姿勢を渡し、packetizeと同期
+`sendto`は専用threadで実行します。送信が遅い場合は未送信の古いframeを上書きし、
+終了時に`overwritten_frames`を表示します。wireのsequenceは実際に送信するframeへ
+連番を付けるため、この上書きはHubのpacket lossにはなりません。
+
+意図的な高負荷で上書き動作を確認する例:
+
+```bash
+./build/macos-debug/bridge/tools/send-test/divive-bridge-send-test \
+  --host 127.0.0.1 \
+  --port 41320 \
+  --rate 1000 \
+  --frames 100 \
+  --trackers 256
+```
+
 ## このtoolで確認できること
 
 - WindowsとMac間のUDP到達性とfirewall設定
@@ -42,7 +58,8 @@ Tracker順を保った複数batchへ分割します。receiverは同一frameの�
 - 60 / 90 / 120Hzでの受信rate
 - Tracker数増加時のbatch分割
 - sequence、duplicate、out-of-order、loss metricsの基本動作
+- 送信過負荷時のlatest-value上書き数とcapture deadline
 
 OpenVR/VIVE Trackerの取得、role永続化、clock offset推定、HMACは含みません。実機
-vertical sliceではM0で採用したbackendのcapture結果を、同じpacketizerとpublisherへ
+vertical sliceではM0で採用したbackendのcapture結果を、同じ`PoseSender::submit()`へ
 接続します。

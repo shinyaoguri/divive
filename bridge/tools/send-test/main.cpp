@@ -1,6 +1,5 @@
+#include "divive/bridge/pose_sender.hpp"
 #include "divive/bridge/sender_options.hpp"
-#include "divive/bridge/udp_publisher.hpp"
-#include "divive/protocol/frame_packetizer.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -13,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -28,12 +28,6 @@ void stop_handler(int) {
     running = 0;
 }
 
-[[nodiscard]] std::uint64_t monotonic_ns(const Clock::time_point origin,
-                                         const Clock::time_point now) {
-    return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(now - origin).count());
-}
-
 [[nodiscard]] UuidBytes random_uuid() {
     std::random_device source;
     UuidBytes result{};
@@ -46,15 +40,15 @@ void stop_handler(int) {
     return result;
 }
 
-[[nodiscard]] PoseBatch
-make_frame(const std::size_t tracker_count, const UuidBytes& tracking_space_id,
-           const std::uint64_t sequence, const std::uint64_t capture_ns,
-           const std::uint64_t send_ns, const std::uint16_t rate_hz) {
+[[nodiscard]] PoseBatch make_frame(const std::size_t tracker_count,
+                                   const UuidBytes& tracking_space_id,
+                                   const std::uint64_t sequence,
+                                   const std::uint64_t capture_ns,
+                                   const std::uint16_t rate_hz) {
     PoseBatch frame;
     frame.tracking_space_id = tracking_space_id;
     frame.space_epoch = 1;
     frame.capture_monotonic_ns = capture_ns;
-    frame.send_monotonic_ns = send_ns;
     frame.requested_rate_hz = rate_hz;
     frame.backend = divive::protocol::Backend::simulator;
     frame.trackers.reserve(tracker_count);
@@ -114,15 +108,6 @@ int main(int argc, char** argv) {
     }
     const auto& options = *parsed.options;
 
-    divive::bridge::UdpPublisher publisher;
-    const auto opened = publisher.open(options.publisher);
-    if (!opened) {
-        std::cerr << "UDP publisherを開始できません: "
-                  << divive::bridge::to_string(opened.error)
-                  << " system_error=" << opened.system_error << '\n';
-        return 2;
-    }
-
     std::signal(SIGINT, stop_handler);
     std::signal(SIGTERM, stop_handler);
 
@@ -131,6 +116,19 @@ int main(int argc, char** argv) {
     envelope.bridge_id = random_uuid();
     const auto tracking_space_id = random_uuid();
 
+    divive::bridge::PoseSender sender;
+    const auto started = sender.start({
+        .publisher = options.publisher,
+        .envelope = envelope,
+    });
+    if (!started) {
+        std::cerr << "Pose senderを開始できません: "
+                  << divive::bridge::to_string(started.error) << " publisher_error="
+                  << divive::bridge::to_string(started.publisher_result.error)
+                  << " system_error=" << started.system_error << '\n';
+        return 2;
+    }
+
     const auto requested_rate_hz =
         static_cast<std::uint16_t>(std::lround(options.rate_hz));
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -138,64 +136,62 @@ int main(int argc, char** argv) {
     const auto start = Clock::now();
     auto next_tick = start;
 
-    std::uint64_t sequence = 0;
-    std::uint64_t datagrams = 0;
-    std::uint64_t bytes = 0;
-    std::uint64_t missed_deadlines = 0;
+    std::uint64_t capture_sequence = 0;
+    std::uint64_t missed_capture_deadlines = 0;
 
     std::cout << "送信開始: " << options.publisher.destination_host << ':'
               << options.publisher.destination_port << " rate=" << options.rate_hz
               << "Hz trackers=" << options.tracker_count << '\n';
 
-    while (running != 0 &&
-           (options.frame_count == 0U || sequence < options.frame_count)) {
+    while (running != 0 && sender.is_running() &&
+           (options.frame_count == 0U || capture_sequence < options.frame_count)) {
         const auto before_capture = Clock::now();
         if (before_capture < next_tick) {
             std::this_thread::sleep_until(next_tick);
         }
-        const auto captured_at = Clock::now();
-        const auto capture_ns = monotonic_ns(start, captured_at);
-        const auto send_ns = monotonic_ns(start, Clock::now());
-        const auto frame = make_frame(options.tracker_count, tracking_space_id,
-                                      sequence, capture_ns, send_ns, requested_rate_hz);
-        envelope.frame_sequence = sequence;
-
-        const auto packetized = divive::protocol::packetize_pose_frame(envelope, frame);
-        if (!packetized) {
-            std::cerr << "frameをpacketizeできません: "
-                      << divive::protocol::to_string(packetized.error) << " pose_error="
-                      << divive::protocol::to_string(packetized.pose_error)
-                      << " packet_error="
-                      << divive::protocol::to_string(packetized.packet_error) << '\n';
-            return 3;
+        const auto capture_ns = divive::bridge::monotonic_now_ns();
+        auto frame = make_frame(options.tracker_count, tracking_space_id,
+                                capture_sequence, capture_ns, requested_rate_hz);
+        const auto submitted = sender.submit(std::move(frame));
+        if (submitted == divive::bridge::PoseSenderSubmitResult::not_running ||
+            submitted == divive::bridge::PoseSenderSubmitResult::closed) {
+            break;
         }
-
-        for (const auto& datagram : packetized.datagrams) {
-            const auto sent = publisher.send(datagram);
-            if (!sent) {
-                std::cerr << "UDP送信失敗: " << divive::bridge::to_string(sent.error)
-                          << " system_error=" << sent.system_error << '\n';
-                return 4;
-            }
-            ++datagrams;
-            bytes += sent.bytes_sent;
-        }
-        ++sequence;
+        ++capture_sequence;
 
         next_tick += period;
-        const auto after_send = Clock::now();
-        if (after_send > next_tick) {
-            const auto behind = after_send - next_tick;
+        const auto after_submit = Clock::now();
+        if (after_submit > next_tick) {
+            const auto behind = after_submit - next_tick;
             const auto missed = static_cast<std::uint64_t>(behind / period) + 1U;
-            missed_deadlines += missed;
+            missed_capture_deadlines += missed;
             next_tick += period * static_cast<std::int64_t>(missed);
         }
     }
 
+    sender.stop();
+    const auto stats = sender.stats();
     const auto elapsed_seconds =
         std::chrono::duration<double>(Clock::now() - start).count();
-    std::cout << "送信終了: frames=" << sequence << " datagrams=" << datagrams
-              << " bytes=" << bytes << " missed_deadlines=" << missed_deadlines
+    std::cout << "送信終了: captured_frames=" << capture_sequence
+              << " submitted_frames=" << stats.submitted_frames
+              << " overwritten_frames=" << stats.overwritten_frames
+              << " sent_frames=" << stats.sent_frames
+              << " datagrams=" << stats.sent_datagrams << " bytes=" << stats.sent_bytes
+              << " missed_capture_deadlines=" << missed_capture_deadlines
               << " elapsed_s=" << elapsed_seconds << '\n';
+
+    if (stats.last_error != divive::bridge::PoseSenderRuntimeError::none) {
+        std::cerr << "送信threadでerrorが発生しました: "
+                  << divive::bridge::to_string(stats.last_error) << " packetizer_error="
+                  << divive::protocol::to_string(stats.packetizer_error)
+                  << " pose_error="
+                  << divive::protocol::to_string(stats.pose_codec_error)
+                  << " packet_error=" << divive::protocol::to_string(stats.packet_error)
+                  << " publisher_error="
+                  << divive::bridge::to_string(stats.publisher_error)
+                  << " system_error=" << stats.system_error << '\n';
+        return 3;
+    }
     return 0;
 }
