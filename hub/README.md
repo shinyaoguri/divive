@@ -14,6 +14,7 @@ UDP datagram
   → Bridge/session単位のsequence・batch判定
   → Bridgeごとに最大1つのframeを再構成
   → latest Bridge / Tracker state
+  → receive ageからlivenessと実効tracking stateを評価
   → CLI snapshotと受信metrics
 ```
 
@@ -23,7 +24,7 @@ Packageは次の責務に分けています。
 | --- | --- |
 | `HubProtocol` | wire decode、canonical model、sequence/batch判定 |
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
-| `HubCore` | 複数batch再構成、partial frame確定、latest state |
+| `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 
 `HubProtocol`はSwiftNIOへ依存しません。今後のSimulatorとPlaybackも、decode後の
@@ -35,6 +36,13 @@ frameとして確定します。partial frameに含まれないTrackerは前回�
 します。sessionまたはtracking spaceが変わった場合は、古いTracker stateを混在
 させません。consumerはthread-safeなsnapshot、Bridge ID、または
 `TrackerKey(bridgeID, trackerID)`から最新値を取得できます。
+
+`HubStateStore.evaluatedSnapshot(atMonotonicNS:policy:)`は、latestの生データを
+上書きせず、指定したHub monotonic timeにおける状態を返します。既定policyでは
+receive ageが250ms以上で`stale / lost / network_stale`、2秒以上で
+`disconnected / disconnected / bridge_timeout`になります。sourceが新鮮な間は、
+実機が報告した`lost / runtime_pose_invalid`などをそのまま維持します。評価時刻を
+引数にすることで、Simulator、Playback、unit testでも同じ境界を再現できます。
 
 ## 必要環境
 
@@ -63,6 +71,7 @@ testは次を含みます。
 - loss、duplicate、out-of-order、session変更、batch欠落の分類
 - batch到着順、partial確定、metadata矛盾、Tracker ID重複
 - latest state、前回値保持、session / tracking space reset
+- liveness policy検証、age境界、source状態保持、partialからの復帰
 - 実UDP socketを使うlocalhost loopback
 
 ## CLI
@@ -74,7 +83,20 @@ swift run divive-receiver --bind 0.0.0.0 --port 41320
 
 姿勢をpacketごとに確認するときだけ`--print-pose`を追加します。通常ログへ毎frameの
 姿勢を出さず、1秒ごとに受信数、確定frame数、partial frame数、pending frame数、
-latest Tracker数を表示します。
+latest Tracker数、fresh / stale数、実効tracking / lost / disconnected /
+simulated数を表示します。
+
+状態評価の閾値はミリ秒単位で変更できます。disconnect閾値はlost閾値より大きい値が
+必要です。
+
+```bash
+swift run divive-receiver \
+  --lost-after-ms 500 \
+  --disconnected-after-ms 3000
+```
+
+250ms / 2秒という既定値は実機検証前の暫定値です。30Hz運用、Wi-Fi、展示環境の
+計測結果からprofileごとに調整します。
 
 `0.0.0.0` bindはWindows Bridgeから到達させるためのCLI既定値です。現段階ではHMACと
 allowlistがないため、信頼できるprivate LANでのみ使い、macOS firewallでも受信元を
@@ -105,7 +127,7 @@ commit済みbindingのbyte一致を検査します。
 - NIO `ByteBuffer`からFlatBuffers runtimeへ渡す際にpacketごとに1回copyする
 - BridgeとHubのmonotonic clock offsetは未推定のため、one-way latencyを断定しない
 - HMAC、sender allowlist、control channelは未実装
-- ageに基づくlost / disconnected状態遷移は未実装
+- liveness遷移eventの購読APIは未実装
 - GUI、calibration、role永続化、content配信は未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる

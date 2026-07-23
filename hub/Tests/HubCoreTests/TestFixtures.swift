@@ -5,7 +5,13 @@ func testUUID(_ seed: UInt8) throws -> UUIDBytes {
   try UUIDBytes(bytes: (0..<16).map { seed &+ UInt8($0) })
 }
 
-func testTracker(_ id: String, x: Float = 0) -> TrackerPose {
+func testTracker(
+  _ id: String,
+  x: Float = 0,
+  trackingState: TrackingState = .simulated,
+  trackingReason: TrackingReason = .none,
+  connected: Bool = true
+) -> TrackerPose {
   TrackerPose(
     trackerID: id,
     idKind: .session,
@@ -15,9 +21,9 @@ func testTracker(_ id: String, x: Float = 0) -> TrackerPose {
     orientation: Quaternion(x: 0, y: 0, z: 0, w: 1),
     linearVelocity: nil,
     angularVelocity: nil,
-    trackingState: .simulated,
-    trackingReason: .none,
-    connected: true,
+    trackingState: trackingState,
+    trackingReason: trackingReason,
+    connected: connected,
     battery: nil,
     deviceMetadataRevision: 1
   )

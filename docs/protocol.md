@@ -198,6 +198,25 @@ wire上の主要状態:
 
 未知のreasonは主要状態を壊さず表示できるようにします。
 
+### Hubのage評価
+
+Hubはwireで受信した最新姿勢とsource報告状態を記録用の生データとして保持し、
+receive ageによる状態を別のviewとして評価します。新鮮な間はsourceの
+`tracking_state`と`tracking_reason`を変更しません。
+
+既定policyは実機検証前の暫定値です。
+
+| receive age | liveness | 実効状態 | reason |
+| --- | --- | --- | --- |
+| 250ms未満 | `fresh` | source報告を維持 | source報告を維持 |
+| 250ms以上、2秒未満 | `stale` | `lost` | `network_stale` |
+| 2秒以上 | `disconnected` | `disconnected` | `bridge_timeout` |
+
+sourceが`connected = false`または`disconnected`を報告した場合は、ageに関係なく
+直ちに`disconnected`として扱い、sourceのreasonを維持します。閾値はHub APIとCLIで
+変更可能です。評価にはHubのmonotonic clockを使い、Bridgeのmonotonic timestampと
+直接比較しません。
+
 ## Version管理
 
 ### Protocol version

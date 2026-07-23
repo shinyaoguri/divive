@@ -126,15 +126,57 @@ public final class HubStateStore: @unchecked Sendable {
     }
   }
 
+  /// latestの生データを変更せず、指定時刻における実効状態を評価する。
+  public func evaluatedSnapshot(
+    atMonotonicNS monotonicNS: UInt64,
+    policy: HubLivenessPolicy = HubLivenessPolicy()
+  ) -> EvaluatedHubStateSnapshot {
+    lock.withLock {
+      HubStateSnapshot(
+        generation: generation,
+        bridges: bridges.values.sorted(by: bridgeLessThan),
+        trackers: trackers.values.sorted(by: trackerLessThan),
+        stateStatistics: value,
+        assemblerStatistics: assembler.statistics()
+      ).evaluated(atMonotonicNS: monotonicNS, policy: policy)
+    }
+  }
+
   public func bridgeState(for bridgeID: UUIDBytes) -> LatestBridgeState? {
     lock.withLock {
       bridges[bridgeID]
     }
   }
 
+  public func evaluatedBridgeState(
+    for bridgeID: UUIDBytes,
+    atMonotonicNS monotonicNS: UInt64,
+    policy: HubLivenessPolicy = HubLivenessPolicy()
+  ) -> EvaluatedBridgeState? {
+    lock.withLock {
+      bridges[bridgeID]?.evaluated(
+        atMonotonicNS: monotonicNS,
+        policy: policy
+      )
+    }
+  }
+
   public func trackerState(for key: TrackerKey) -> LatestTrackerState? {
     lock.withLock {
       trackers[key]
+    }
+  }
+
+  public func evaluatedTrackerState(
+    for key: TrackerKey,
+    atMonotonicNS monotonicNS: UInt64,
+    policy: HubLivenessPolicy = HubLivenessPolicy()
+  ) -> EvaluatedTrackerState? {
+    lock.withLock {
+      trackers[key]?.evaluated(
+        atMonotonicNS: monotonicNS,
+        policy: policy
+      )
     }
   }
 

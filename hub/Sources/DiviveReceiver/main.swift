@@ -8,6 +8,8 @@ private struct Options {
   var host = "0.0.0.0"
   var port = 41_320
   var printPose = false
+  var lostAfterMS: UInt64 = 250
+  var disconnectedAfterMS: UInt64 = 2_000
 
   static func parse(_ arguments: [String]) throws -> Self {
     var options = Self()
@@ -28,6 +30,20 @@ private struct Options {
         options.port = port
       case "--print-pose":
         options.printPose = true
+      case "--lost-after-ms":
+        index += 1
+        options.lostAfterMS = try parseMilliseconds(
+          arguments,
+          index: index,
+          option: "--lost-after-ms"
+        )
+      case "--disconnected-after-ms":
+        index += 1
+        options.disconnectedAfterMS = try parseMilliseconds(
+          arguments,
+          index: index,
+          option: "--disconnected-after-ms"
+        )
       case "--help", "-h":
         printUsage()
         exit(0)
@@ -36,19 +52,54 @@ private struct Options {
       }
       index += 1
     }
+    guard options.disconnectedAfterMS > options.lostAfterMS else {
+      throw OptionError.invalidLivenessThresholds
+    }
     return options
+  }
+
+  var livenessPolicy: HubLivenessPolicy {
+    get throws {
+      try HubLivenessPolicy(
+        lostAfterNS: lostAfterMS * 1_000_000,
+        disconnectedAfterNS: disconnectedAfterMS * 1_000_000
+      )
+    }
+  }
+
+  private static func parseMilliseconds(
+    _ arguments: [String],
+    index: Int,
+    option: String
+  ) throws -> UInt64 {
+    guard index < arguments.count else {
+      throw OptionError.missingValue(option)
+    }
+    guard let value = UInt64(arguments[index]),
+      value > 0,
+      value <= UInt64.max / 1_000_000
+    else {
+      throw OptionError.invalidMilliseconds(option)
+    }
+    return value
   }
 }
 
 private enum OptionError: Error, CustomStringConvertible {
   case missingValue(String)
   case invalidPort
+  case invalidMilliseconds(String)
+  case invalidLivenessThresholds
   case unknownArgument(String)
 
   var description: String {
     switch self {
     case .missingValue(let argument): "\(argument) の値がありません"
     case .invalidPort: "portは0〜65535の整数で指定してください"
+    case .invalidMilliseconds(let argument):
+      "\(argument) は1以上のミリ秒で指定してください"
+    case .invalidLivenessThresholds:
+      "--disconnected-after-ms は --lost-after-ms より大きくしてください"
     case .unknownArgument(let argument): "不明な引数です: \(argument)"
     }
   }
@@ -57,11 +108,13 @@ private enum OptionError: Error, CustomStringConvertible {
 private func printUsage() {
   print(
     """
-    使用方法: divive-receiver [--bind ADDRESS] [--port PORT] [--print-pose]
+    使用方法: divive-receiver [options]
 
-      --bind ADDRESS  UDP bind先。既定値: 0.0.0.0
-      --port PORT     UDP port。既定値: 41320
-      --print-pose    受信したTracker姿勢をpacketごとに表示
+      --bind ADDRESS              UDP bind先。既定値: 0.0.0.0
+      --port PORT                 UDP port。既定値: 41320
+      --print-pose                受信したTracker姿勢をpacketごとに表示
+      --lost-after-ms MS          stale/lost判定。既定値: 250
+      --disconnected-after-ms MS  disconnect判定。既定値: 2000
     """
   )
 }
@@ -71,10 +124,16 @@ private final class ConsoleReporter: @unchecked Sendable {
   private let receiver: UDPReceiver
   private let hubState = HubStateStore()
   private let printPose: Bool
+  private let livenessPolicy: HubLivenessPolicy
 
-  init(receiver: UDPReceiver, printPose: Bool) {
+  init(
+    receiver: UDPReceiver,
+    printPose: Bool,
+    livenessPolicy: HubLivenessPolicy
+  ) {
     self.receiver = receiver
     self.printPose = printPose
+    self.livenessPolicy = livenessPolicy
   }
 
   func receive(_ received: ReceivedPosePacket) {
@@ -99,7 +158,16 @@ private final class ConsoleReporter: @unchecked Sendable {
 
   func printStatistics() {
     let stats = receiver.statistics()
-    let state = hubState.snapshot()
+    let state = hubState.evaluatedSnapshot(
+      atMonotonicNS: DispatchTime.now().uptimeNanoseconds,
+      policy: livenessPolicy
+    )
+    let fresh = state.trackers.count { $0.liveness == .fresh }
+    let stale = state.trackers.count { $0.liveness == .stale }
+    let disconnected = state.trackers.count { $0.liveness == .disconnected }
+    let tracking = state.trackers.count { $0.trackingState == .tracking }
+    let lost = state.trackers.count { $0.trackingState == .lost }
+    let simulated = state.trackers.count { $0.trackingState == .simulated }
     print(
       "received=\(stats.datagrams) valid=\(stats.validPackets) "
         + "invalid=\(stats.invalidPackets) loss=\(stats.missingFrames) "
@@ -108,7 +176,10 @@ private final class ConsoleReporter: @unchecked Sendable {
         + "hub_frames=\(state.stateStatistics.appliedFrames) "
         + "partial=\(state.stateStatistics.partialFrames) "
         + "pending=\(state.assemblerStatistics.pendingFrames) "
-        + "latest_trackers=\(state.trackers.count)"
+        + "latest_trackers=\(state.trackers.count) "
+        + "fresh=\(fresh) stale=\(stale) "
+        + "tracking=\(tracking) lost=\(lost) "
+        + "disconnected=\(disconnected) simulated=\(simulated)"
     )
   }
 
@@ -128,7 +199,11 @@ private final class ConsoleReporter: @unchecked Sendable {
 do {
   let options = try Options.parse(Array(CommandLine.arguments.dropFirst()))
   let receiver = UDPReceiver()
-  let reporter = ConsoleReporter(receiver: receiver, printPose: options.printPose)
+  let reporter = ConsoleReporter(
+    receiver: receiver,
+    printPose: options.printPose,
+    livenessPolicy: try options.livenessPolicy
+  )
   let address = try receiver.start(
     configuration: .init(host: options.host, port: options.port),
     onPacket: reporter.receive,

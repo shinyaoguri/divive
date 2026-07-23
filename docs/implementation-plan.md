@@ -26,6 +26,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] C++ UDP publisher、1,200-byte batch分割、simulated sender
 - [x] C++ sender → Swift receiverのlocalhost複数batch結合
 - [x] HubCoreの複数batch再構成とlatest Tracker state
+- [x] receive ageに基づくlost / disconnected評価
 - [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
@@ -191,7 +192,8 @@ HubSimulator
 現在は`HubProtocol`、`HubNetworking`、`HubCore`、`divive-receiver`まで実装済みです。
 `HubProtocol`はnetwork runtimeから独立させ、C++と共通のgolden packetで検証します。
 `HubCore`はBridgeごとに未完成frameを最大1つ保持し、frame再構成とlatest stateを
-担当します。calibrationとageに基づく状態遷移は次の段階で追加します。
+担当します。latestの生データを変更せず、明示したHub monotonic timeからlivenessと
+実効tracking stateを評価できます。calibrationは次の段階で追加します。
 
 ### D1. Ingest pipeline
 
@@ -211,7 +213,7 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 
 - [x] Tracker stateは最新値を1つ保持
 - [x] event historyを作らず、pose frame queueをBridgeごとに最大1つへ制限
-- [ ] lost thresholdとdisconnected thresholdを別設定
+- [x] lost thresholdとdisconnected thresholdを別設定
 - [x] Network、Simulator、Playbackが同じassembled frameを入力可能
 
 ### D3. GUI
