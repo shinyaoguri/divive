@@ -15,22 +15,6 @@ target_include_directories(
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
-function(divive_enable_warnings target)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8)
-    else()
-        target_compile_options(
-            ${target}
-            PRIVATE
-                -Wall
-                -Wextra
-                -Wpedantic
-                -Wconversion
-                -Wsign-conversion
-        )
-    endif()
-endfunction()
-
 divive_enable_warnings(divive_probe_core)
 
 if(DIVIVE_BUILD_OPENVR_PROBE)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
@@ -31,10 +32,25 @@ def local_target(source: Path, raw_target: str) -> Path | None:
 
 def main() -> int:
     failures: list[str] = []
+    result = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "*.md",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
     markdown_files = sorted(
-        path
-        for path in ROOT.rglob("*.md")
-        if ".git" not in path.parts
+        ROOT / Path(entry)
+        for entry in result.stdout.decode("utf-8").split("\0")
+        if entry
     )
 
     for source in markdown_files:

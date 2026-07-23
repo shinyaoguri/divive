@@ -1,0 +1,96 @@
+namespace Divive.Protocol;
+
+/// 生成元の種類。取得backend固有の型はwireへ露出しない。
+enum Backend:ubyte {
+  Unknown = 0,
+  OpenVR = 1,
+  OpenXR = 2,
+  Simulator = 3,
+  Playback = 4
+}
+
+/// Tracker IDが再起動後も永続できるかを示す。
+enum TrackerIdKind:ubyte {
+  Unknown = 0,
+  Permanent = 1,
+  Session = 2
+}
+
+/// コンテンツが判断に使う主要な追跡状態。
+enum TrackingState:ubyte {
+  Unknown = 0,
+  Tracking = 1,
+  Lost = 2,
+  Disconnected = 3,
+  Simulated = 4
+}
+
+/// backend差を吸収した追跡状態の補助理由。
+enum TrackingReason:ubyte {
+  Unknown = 0,
+  None = 1,
+  RuntimePoseInvalid = 2,
+  OutOfRange = 3,
+  DeviceUnplugged = 4,
+  BridgeTimeout = 5,
+  NetworkStale = 6,
+  SimulatedFault = 7
+}
+
+/// RFC 4122 byte列をbig-endianの32-bit word 4個として表す。
+struct Uuid {
+  word0:uint;
+  word1:uint;
+  word2:uint;
+  word3:uint;
+}
+
+/// right-handed、metre、+X right、+Y up、-Z forward。
+struct Vec3 {
+  x:float;
+  y:float;
+  z:float;
+}
+
+/// 成分順は(x, y, z, w)。送信前に正規化する。
+struct Quaternion {
+  x:float;
+  y:float;
+  z:float;
+  w:float;
+}
+
+/// このstruct自体が欠けている場合はbattery情報が利用できない。
+struct BatteryStatus {
+  level:float;
+  charging:bool;
+}
+
+table TrackerPose {
+  tracker_id:string (id: 0);
+  id_kind:TrackerIdKind = Unknown (id: 1);
+  role:string (id: 2);
+  runtime_role:string (id: 3);
+  position:Vec3 (id: 4);
+  orientation:Quaternion (id: 5);
+  linear_velocity:Vec3 (id: 6);
+  angular_velocity:Vec3 (id: 7);
+  tracking_state:TrackingState = Unknown (id: 8);
+  tracking_reason:TrackingReason = Unknown (id: 9);
+  connected:bool = false (id: 10);
+  battery:BatteryStatus (id: 11);
+  device_metadata_revision:uint = 0 (id: 12);
+}
+
+table PoseBatch {
+  tracking_space_id:Uuid (id: 0);
+  space_epoch:uint = 0 (id: 1);
+  capture_monotonic_ns:ulong = 0 (id: 2);
+  send_monotonic_ns:ulong = 0 (id: 3);
+  requested_rate_hz:ushort = 0 (id: 4);
+  backend:Backend = Unknown (id: 5);
+  trackers:[TrackerPose] (id: 6);
+}
+
+root_type PoseBatch;
+file_identifier "DVPS";
