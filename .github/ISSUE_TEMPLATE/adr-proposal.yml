@@ -1,0 +1,48 @@
+name: 設計判断
+description: 技術判断の提案または既存ADRの見直し
+title: "[ADR] "
+labels: []
+assignees: []
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: 背景
+      description: どの判断を、なぜ今行う必要がありますか。
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 制約と判断基準
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: 選択肢
+      description: 少なくとも現状維持を含めてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: 推奨案
+      description: 選択、トレードオフ、条件を書いてください。
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: 検証方法
+      description: どのtestやmetricで判断を確認しますか。
+    validations:
+      required: true
+
+  - type: input
+    id: related_adr
+    attributes:
+      label: 関連または置換対象のADR
+      placeholder: docs/adr/0002-openvr-first-backend.md

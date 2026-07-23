@@ -1,0 +1,93 @@
+name: 実機検証
+description: Tracker、runtime、networkに関する再現可能な実機検証
+title: "[Hardware] "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `docs/hardware-validation.md`に従い、成功・失敗の両方に環境情報と証跡を残してください。
+
+  - type: input
+    id: test_id
+    attributes:
+      label: 検証ID
+      description: H1、H2など。新規検証なら短い識別子を付けてください。
+      placeholder: H2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: 対象ハードウェア
+      options:
+        - VIVE Tracker 3.0
+        - VIVE Ultimate Tracker
+        - Mixed trackers
+        - Bridge / network only
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: 検証する問いまたは仮説
+      description: この検証で何を判定しますか。
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境
+      description: Windows、SteamVR、VIVE Hub、firmware、dongle、base station、networkを含めてください。
+      placeholder: |
+        Windows:
+        SteamVR:
+        VIVE Hub:
+        Tracker / firmware:
+        Dongle / USB:
+        Network:
+    validations:
+      required: true
+
+  - type: textarea
+    id: procedure
+    attributes:
+      label: 手順
+      description: 別の人が再現できる手順を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: pass_criteria
+    attributes:
+      label: 合格・不合格の基準
+      description: 実行前に判定基準を定義してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 証跡とmetrics
+      description: 実行後にログ、recording、screenshot、hash、測定値を追加してください。
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 設計判断への影響
+      description: backend、MVP scope、運用前提へどう影響しますか。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: Secretや個人情報を証跡から除外した
+          required: true
+        - label: Runtimeとfirmware versionを記録した
+          required: true
