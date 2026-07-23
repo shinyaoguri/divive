@@ -27,10 +27,15 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] C++ sender → Swift receiverのlocalhost複数batch結合
 - [x] HubCoreの複数batch再構成とlatest Tracker state
 - [x] receive ageに基づくlost / disconnected評価
+- [x] deterministic Headless Simulator coreとCLI
+- [x] static / circle、30 / 60 / 90 / 120Hz
+- [x] seed付きframe loss / tracking lost
 - [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
 sourceが完成してもM0は完了ではありません。Windows実機の証跡とGate判定が必要です。
+実機が手元にない期間もM0の未完了項目を完了扱いにはせず、Simulatorで独立して
+検証できるHub、SDK、Recorderの開発を進めます。
 
 ## 依存関係
 
@@ -272,11 +277,13 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 
 ### F1. Simulator
 
-- deterministic seed
-- 30 / 60 / 90 / 120Hz
-- static、circle、walk、jump、random
-- loss、delay、jitter、reordering、disconnect
-- 実機と同じHub input interface
+- [x] deterministic seedと固定step time
+- [x] 30 / 60 / 90 / 120Hz
+- [x] static、circle
+- [ ] walk、jump、random
+- [x] frame loss、tracking lost
+- [ ] delay、jitter、reordering、disconnect
+- [x] `HubFrameSink`による実機正規化後と同じHub input interface
 
 ### F2. Calibration
 

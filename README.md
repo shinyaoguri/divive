@@ -118,6 +118,10 @@ sequence/loss判定、SwiftNIO UDP受信、複数batch再構成、latest Tracker
 ageに基づくlost / disconnected評価、CLI診断まで実装済みです。Windows Bridgeとの
 実機vertical slice、GUI、calibration、content配信はまだ含みません。
 
+[Headless Simulator](hub/SIMULATOR.md)は、VIVE実機やWindowsがない状態で、
+決定論的なvirtual Tracker姿勢と再現可能なframe loss / tracking lostを同じ
+Hub入力へ供給します。
+
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
 送信を検証します。captureと同期socket I/Oはcapacity 1のlatest-value handoffで

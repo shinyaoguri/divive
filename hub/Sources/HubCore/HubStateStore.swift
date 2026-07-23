@@ -65,6 +65,12 @@ public enum HubFrameApplyDisposition: Equatable, Sendable {
   case stale
 }
 
+/// Network、Simulator、Playbackが共有する正規化済みframeの入力境界。
+public protocol HubFrameSink: Sendable {
+  @discardableResult
+  func apply(_ frame: AssembledPoseFrame) -> HubFrameApplyDisposition
+}
+
 /// Network、Simulator、Playbackから同じassembled frameを受け取るlatest state store。
 ///
 /// lock内ではframe集約とdictionary更新だけを行い、I/Oやcallbackは実行しない。
@@ -261,6 +267,8 @@ public final class HubStateStore: @unchecked Sendable {
     return left.key.bridgeID.bytes.lexicographicallyPrecedes(right.key.bridgeID.bytes)
   }
 }
+
+extension HubStateStore: HubFrameSink {}
 
 extension NSLock {
   fileprivate func withLock<T>(_ body: () throws -> T) rethrows -> T {
