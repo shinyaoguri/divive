@@ -1,0 +1,9 @@
+/build/
+/dist/
+/CMakeUserPresets.json
+
+# 実機のraw logとscreenshotはGitへ直接commitしない。
+/hardware-tests/runs/**/raw/*
+/hardware-tests/runs/**/screenshots/*
+!/hardware-tests/runs/**/raw/.gitkeep
+!/hardware-tests/runs/**/screenshots/.gitkeep

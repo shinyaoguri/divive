@@ -10,6 +10,17 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 4. 同じ入力をSimulatorとPlaybackで置き換えられる
 5. 欠落、遅延、追跡喪失を観測できる
 
+## 現在の実装状況
+
+- [x] A1 OpenVR probeのsource、JSONL、共通unit test
+- [x] macOSでOpenVR非依存coreをbuild/test
+- [x] Windows x64 build用CIとartifact作成
+- [ ] Windows実機でH0/H1を実行
+- [ ] Ultimate実機でH2を実行
+- [ ] 実機結果に基づくA3 backend decision
+
+sourceが完成してもM0は完了ではありません。Windows実機の証跡とGate判定が必要です。
+
 ## 依存関係
 
 ```mermaid
