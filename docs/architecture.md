@@ -181,6 +181,10 @@ protocol FrameSource {
 - `PlaybackFrameSource`
 
 取得元を切り替えても、calibration、distribution、SDK APIは変えません。
+正規化後の入力境界は`HubFrameSink.apply(AssembledPoseFrame)`です。現在の
+Headless Simulatorはwire encodeやUDP loopbackを挟まず、この境界から
+`HubStateStore`へ入力します。network faultの試験は別途UDP経路で行い、
+Simulator自体のmotion/fault再現性とtransport検証を混同しません。
 
 ## 状態遷移
 

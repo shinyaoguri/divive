@@ -25,7 +25,9 @@ Packageは次の責務に分けています。
 | `HubProtocol` | wire decode、canonical model、sequence/batch判定 |
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
+| `HubSimulator` | 固定step motion、Tracker編集、seed付き障害注入 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
+| `divive-simulator` | Headless Simulatorの実時間CLI |
 
 `HubProtocol`はSwiftNIOへ依存しません。今後のSimulatorとPlaybackも、decode後の
 canonical modelから`HubStateStore.apply()`へ接続できます。
@@ -43,6 +45,9 @@ receive ageが250ms以上で`stale / lost / network_stale`、2秒以上で
 `disconnected / disconnected / bridge_timeout`になります。sourceが新鮮な間は、
 実機が報告した`lost / runtime_pose_invalid`などをそのまま維持します。評価時刻を
 引数にすることで、Simulator、Playback、unit testでも同じ境界を再現できます。
+
+Simulatorの設計、CLI、fault semanticsは
+[SIMULATOR.md](SIMULATOR.md)を参照してください。
 
 ## 必要環境
 
@@ -72,6 +77,7 @@ testは次を含みます。
 - batch到着順、partial確定、metadata矛盾、Tracker ID重複
 - latest state、前回値保持、session / tracking space reset
 - liveness policy検証、age境界、source状態保持、partialからの復帰
+- SimulatorのTracker編集、fixed-step motion、seed再現性、fault、Hub sink結合
 - 実UDP socketを使うlocalhost loopback
 
 ## CLI
