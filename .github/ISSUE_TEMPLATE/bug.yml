@@ -1,0 +1,71 @@
+name: Bug
+description: 再現可能な不具合を報告する
+title: "[Bug] "
+labels: []
+assignees: []
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Windows Bridge
+        - Mac Hub
+        - Protocol
+        - Recorder / Playback
+        - Simulator
+        - Unity SDK
+        - Unreal SDK
+        - Web SDK
+        - Documentation / tooling
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: App、OS、runtime、engine、hardware、networkのversionを含めてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, metrics, recordings
+      description: Secretを削除し、必要ならrecordingのhashと保管先を記載してください。
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression information
+      description: 最後に正常だったversionや変更が分かれば書いてください。

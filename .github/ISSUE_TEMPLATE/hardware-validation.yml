@@ -1,0 +1,93 @@
+name: Hardware validation
+description: Tracker、runtime、networkに関する再現可能な実機検証
+title: "[Hardware] "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `docs/hardware-validation.md`に従い、成功・失敗の両方に環境情報と証跡を残してください。
+
+  - type: input
+    id: test_id
+    attributes:
+      label: Test ID
+      description: H1、H2など。新規検証なら短い識別子を付けてください。
+      placeholder: H2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware
+      options:
+        - VIVE Tracker 3.0
+        - VIVE Ultimate Tracker
+        - Mixed trackers
+        - Bridge / network only
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question or hypothesis
+      description: この検証で何を判定しますか。
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows、SteamVR、VIVE Hub、firmware、dongle、base station、networkを含めてください。
+      placeholder: |
+        Windows:
+        SteamVR:
+        VIVE Hub:
+        Tracker / firmware:
+        Dongle / USB:
+        Network:
+    validations:
+      required: true
+
+  - type: textarea
+    id: procedure
+    attributes:
+      label: Procedure
+      description: 別の人が再現できる手順を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: pass_criteria
+    attributes:
+      label: Pass / fail criteria
+      description: 実行前に判定基準を定義してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and metrics
+      description: 実行後にログ、recording、screenshot、hash、測定値を追加してください。
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Decision impact
+      description: backend、MVP scope、運用前提へどう影響しますか。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: Secretや個人情報を証跡から除外した
+          required: true
+        - label: Runtimeとfirmware versionを記録した
+          required: true

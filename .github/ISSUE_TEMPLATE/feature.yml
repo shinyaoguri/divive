@@ -1,0 +1,64 @@
+name: Feature
+description: 検証可能な利用者成果を提案する
+title: "[Feature] "
+labels: []
+assignees: []
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome
+      description: 誰が何をできるようになりますか。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Roadmap milestone
+      options:
+        - M0 Hardware Feasibility
+        - M1 End-to-End Vertical Slice
+        - M2 Developer MVP
+        - M3 Content SDKs and Diagnostics
+        - M4 Production Readiness
+        - Later / unplanned
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: 含めるものを書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: このIssueで扱わないものを書いてください。
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: 観測可能な完了条件をチェックリストで書いてください。
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and risks
+      description: Hardware gate、ADR、protocol、他Issueとの依存を書いてください。
+
+  - type: textarea
+    id: design
+    attributes:
+      label: Proposed approach
+      description: 実装案は任意です。成果と受入基準を優先してください。
