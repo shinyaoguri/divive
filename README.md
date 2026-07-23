@@ -114,8 +114,9 @@ envelope、FlatBuffers schema、C++ codec、golden packetをprotocol conformance
 testで固定しています。
 
 [Mac Hub headless receiver](hub/README.md)は、同じgolden packetのSwift decode、
-sequence/loss判定、SwiftNIO UDP受信、CLI診断まで実装済みです。Windows Bridgeとの
-実機vertical slice、Hub state、GUI、content配信はまだ含みません。
+sequence/loss判定、SwiftNIO UDP受信、複数batch再構成、latest Tracker state、
+CLI診断まで実装済みです。Windows Bridgeとの実機vertical slice、GUI、calibration、
+content配信はまだ含みません。
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz

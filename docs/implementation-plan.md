@@ -25,6 +25,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] SwiftNIO UDP receiverとlocalhost loopback test
 - [x] C++ UDP publisher、1,200-byte batch分割、simulated sender
 - [x] C++ sender → Swift receiverのlocalhost複数batch結合
+- [x] HubCoreの複数batch再構成とlatest Tracker state
 - [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
@@ -187,9 +188,10 @@ HubRecorder
 HubSimulator
 ```
 
-現在は`HubProtocol`、`HubNetworking`、`divive-receiver`まで実装済みです。
+現在は`HubProtocol`、`HubNetworking`、`HubCore`、`divive-receiver`まで実装済みです。
 `HubProtocol`はnetwork runtimeから独立させ、C++と共通のgolden packetで検証します。
-HubCoreのlatest state、frame再構成、calibrationは次の段階で追加します。
+`HubCore`はBridgeごとに未完成frameを最大1つ保持し、frame再構成とlatest stateを
+担当します。calibrationとageに基づく状態遷移は次の段階で追加します。
 
 ### D1. Ingest pipeline
 
@@ -207,10 +209,10 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 
 ### D2. State model
 
-- Tracker stateは最新値を1つ保持
-- event historyとpose frame queueを分離
-- lost thresholdとdisconnected thresholdを別設定
-- sourceはNetwork、Simulator、Playbackで共通protocol
+- [x] Tracker stateは最新値を1つ保持
+- [x] event historyを作らず、pose frame queueをBridgeごとに最大1つへ制限
+- [ ] lost thresholdとdisconnected thresholdを別設定
+- [x] Network、Simulator、Playbackが同じassembled frameを入力可能
 
 ### D3. GUI
 

@@ -4,6 +4,11 @@ import Foundation
 public struct DecodedPosePacket: Equatable, Sendable {
   public let envelope: PacketEnvelope
   public let poseBatch: PoseBatch
+
+  public init(envelope: PacketEnvelope, poseBatch: PoseBatch) {
+    self.envelope = envelope
+    self.poseBatch = poseBatch
+  }
 }
 
 public struct PosePacketDecoder: Sendable {

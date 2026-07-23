@@ -121,6 +121,11 @@ C++ Bridge実装は、各Tracker追加後のFlatBuffers実payload長を使うgre
 します。Tracker数だけからpacket長を推測しません。単体Trackerがpayload budgetを
 超える場合はsilent truncateせずframe生成errorとして可視化します。
 
+Mac `HubCore`はbatch index順でTrackerを結合し、全batchが到着した時点でcomplete
+frameを確定します。次sequenceまたはsession切替までに揃わなければpartial frameを
+確定します。Bridgeごとの未完成frameは最大1つです。同一frame内でmetadata、
+batch count、Tracker IDが矛盾するpacketはstateへ適用しません。
+
 ## 順序制御
 
 Hubは`session_id + bridge_id`ごとにsequenceを管理します。

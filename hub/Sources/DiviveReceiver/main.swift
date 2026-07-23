@@ -1,5 +1,6 @@
 import Dispatch
 import Foundation
+import HubCore
 import HubNetworking
 import HubProtocol
 
@@ -68,6 +69,7 @@ private func printUsage() {
 /// NIO event loopとDispatch workerから呼ばれる処理をMainActorから分離する。
 private final class ConsoleReporter: @unchecked Sendable {
   private let receiver: UDPReceiver
+  private let hubState = HubStateStore()
   private let printPose: Bool
 
   init(receiver: UDPReceiver, printPose: Bool) {
@@ -76,12 +78,17 @@ private final class ConsoleReporter: @unchecked Sendable {
   }
 
   func receive(_ received: ReceivedPosePacket) {
+    let assembly = hubState.ingest(
+      received.packet,
+      receivedMonotonicNS: received.receivedMonotonicNS
+    )
     guard printPose else { return }
     let packet = received.packet
     print(
       "frame=\(packet.envelope.frameSequence) "
         + "batch=\(packet.envelope.batchIndex + 1)/\(packet.envelope.batchCount) "
         + "trackers=\(packet.poseBatch.trackers.count) "
+        + "emitted_frames=\(assembly.emittedFrames.count) "
         + "processing_us=\(received.processingTimeNS / 1_000)"
     )
   }
@@ -92,12 +99,25 @@ private final class ConsoleReporter: @unchecked Sendable {
 
   func printStatistics() {
     let stats = receiver.statistics()
+    let state = hubState.snapshot()
     print(
       "received=\(stats.datagrams) valid=\(stats.validPackets) "
         + "invalid=\(stats.invalidPackets) loss=\(stats.missingFrames) "
         + "duplicate=\(stats.duplicatePackets) "
-        + "out_of_order=\(stats.outOfOrderPackets)"
+        + "out_of_order=\(stats.outOfOrderPackets) "
+        + "hub_frames=\(state.stateStatistics.appliedFrames) "
+        + "partial=\(state.stateStatistics.partialFrames) "
+        + "pending=\(state.assemblerStatistics.pendingFrames) "
+        + "latest_trackers=\(state.trackers.count)"
     )
+  }
+
+  func flushPendingFrames() {
+    _ = hubState.flushPendingFrames()
+  }
+
+  func stateSnapshot() -> HubStateSnapshot {
+    hubState.snapshot()
   }
 
   func stop() {
@@ -129,14 +149,18 @@ do {
   metricsTimer.resume()
 
   try receiver.waitUntilClosed()
+  reporter.flushPendingFrames()
   metricsTimer.cancel()
   interruptSource.cancel()
   try receiver.shutdown()
 
   let stats = receiver.statistics()
+  let state = reporter.stateSnapshot()
   print(
     "終了: received=\(stats.datagrams) valid=\(stats.validPackets) "
-      + "invalid=\(stats.invalidPackets)"
+      + "invalid=\(stats.invalidPackets) "
+      + "hub_frames=\(state.stateStatistics.appliedFrames) "
+      + "latest_trackers=\(state.trackers.count)"
   )
 } catch {
   fputs("起動できませんでした: \(error)\n", stderr)
