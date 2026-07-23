@@ -30,6 +30,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] deterministic Headless Simulator coreとCLI
 - [x] static / circle、30 / 60 / 90 / 120Hz
 - [x] seed付きframe loss / tracking lost
+- [x] SwiftUI Simulator GUIの開始・停止、上面図、Tracker一覧、基本metrics
 - [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
@@ -223,12 +224,20 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 
 ### D3. GUI
 
-- BridgeとTracker一覧
-- 3D pose表示
-- tracking、lost、disconnected、simulated
-- rate、loss、out-of-order、age、jitter
-- roleとprofile編集
-- record/playback/simulator操作
+- [ ] Network BridgeとTracker一覧
+- [x] Simulator Tracker一覧
+- [x] X / -Z上面図
+- [ ] RealityKitによる3D pose表示
+- [x] tracking、lost、disconnected、simulated
+- [x] Simulator rate、frame loss、age、deadline miss
+- [ ] Network loss、out-of-order、jitter
+- [ ] roleとprofile編集
+- [ ] record/playback操作
+- [x] Simulatorの開始、停止、設定反映
+
+最初のGUIは実機なしで触れる開発用vertical sliceです。姿勢生成はMainActorから分離し、
+SwiftUIは`HubStateStore`のlatest snapshotを10Hzで読むため、表示が遅れても
+pose eventをqueueしません。起動方法と制約は[Mac Hub GUI](../hub/GUI.md)に記載します。
 
 ## 作業領域E: SDK
 

@@ -12,8 +12,10 @@ let package = Package(
     .library(name: "HubNetworking", targets: ["HubNetworking"]),
     .library(name: "HubCore", targets: ["HubCore"]),
     .library(name: "HubSimulator", targets: ["HubSimulator"]),
+    .library(name: "HubAppUI", targets: ["HubAppUI"]),
     .executable(name: "divive-receiver", targets: ["DiviveReceiver"]),
     .executable(name: "divive-simulator", targets: ["DiviveSimulator"]),
+    .executable(name: "divive-hub-app", targets: ["DiviveHubApp"]),
   ],
   dependencies: [
     .package(
@@ -48,6 +50,10 @@ let package = Package(
       name: "HubSimulator",
       dependencies: ["HubCore", "HubProtocol"]
     ),
+    .target(
+      name: "HubAppUI",
+      dependencies: ["HubCore", "HubProtocol", "HubSimulator"]
+    ),
     .executableTarget(
       name: "DiviveReceiver",
       dependencies: ["HubCore", "HubNetworking", "HubProtocol"]
@@ -55,6 +61,10 @@ let package = Package(
     .executableTarget(
       name: "DiviveSimulator",
       dependencies: ["HubCore", "HubProtocol", "HubSimulator"]
+    ),
+    .executableTarget(
+      name: "DiviveHubApp",
+      dependencies: ["HubAppUI"]
     ),
     .testTarget(
       name: "HubProtocolTests",
@@ -77,6 +87,10 @@ let package = Package(
     .testTarget(
       name: "HubSimulatorTests",
       dependencies: ["HubCore", "HubProtocol", "HubSimulator"]
+    ),
+    .testTarget(
+      name: "HubAppUITests",
+      dependencies: ["HubAppUI", "HubCore", "HubProtocol", "HubSimulator"]
     ),
   ]
 )

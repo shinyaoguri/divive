@@ -1,8 +1,9 @@
-# Mac Hub headless receiver
+# Mac Hub
 
-Mac Tracker Hubのうち、GUIから独立したM1受信vertical sliceです。Windows Bridgeがまだ
+Mac Tracker Hubのheadless coreとSwiftUI開発用GUIです。Windows Bridgeがまだ
 なくても、C++実装が生成したgolden packetをSwiftで検証し、UDP loopbackでingest経路を
-試験できます。
+試験できます。SwiftUI GUIではHeadless Simulatorを操作して、Macだけで姿勢と状態遷移を
+確認できます。
 
 ## 現在の範囲
 
@@ -26,8 +27,10 @@ Packageは次の責務に分けています。
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
 | `HubSimulator` | 固定step motion、Tracker編集、seed付き障害注入 |
+| `HubAppUI` | Simulator runtime、10Hz latest snapshot、SwiftUI画面 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 | `divive-simulator` | Headless Simulatorの実時間CLI |
+| `divive-hub-app` | macOS SwiftUI開発用GUI |
 
 `HubProtocol`はSwiftNIOへ依存しません。今後のSimulatorとPlaybackも、decode後の
 canonical modelから`HubStateStore.apply()`へ接続できます。
@@ -48,6 +51,7 @@ receive ageが250ms以上で`stale / lost / network_stale`、2秒以上で
 
 Simulatorの設計、CLI、fault semanticsは
 [SIMULATOR.md](SIMULATOR.md)を参照してください。
+Mac GUIの起動方法と現在の制約は[GUI.md](GUI.md)を参照してください。
 
 ## 必要環境
 
@@ -78,7 +82,18 @@ testは次を含みます。
 - latest state、前回値保持、session / tracking space reset
 - liveness policy検証、age境界、source状態保持、partialからの復帰
 - SimulatorのTracker編集、fixed-step motion、seed再現性、fault、Hub sink結合
+- GUI設定からのscene生成と実時間runtimeの開始・停止
 - 実UDP socketを使うlocalhost loopback
+
+## Mac GUI
+
+```bash
+cd hub
+swift run divive-hub-app
+```
+
+左側でTracker数、motion、更新頻度、seed、frame loss、tracking lostを設定して
+「開始」を押します。詳細は[GUI.md](GUI.md)を参照してください。
 
 ## CLI
 
@@ -134,7 +149,8 @@ commit済みbindingのbyte一致を検査します。
 - BridgeとHubのmonotonic clock offsetは未推定のため、one-way latencyを断定しない
 - HMAC、sender allowlist、control channelは未実装
 - liveness遷移eventの購読APIは未実装
-- GUI、calibration、role永続化、content配信は未実装
+- Network receiverとGUIのsource切替は未実装
+- 3D表示、calibration、role永続化、content配信は未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる
 ことを先に固定します。copy最適化は受信処理時間の計測結果を見て判断します。
