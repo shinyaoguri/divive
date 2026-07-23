@@ -18,6 +18,10 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [ ] Windows実機でH0/H1を実行
 - [ ] Ultimate実機でH2を実行
 - [ ] 実機結果に基づくA3 backend decision
+- [x] B0 canonical pose modelをFlatBuffers schemaとして固定
+- [x] B1 72-byte envelope、64-bit sequence、golden packetを実装
+- [x] C++ encoder/decoderとmacOS conformance test
+- [ ] Swift receiverで同じgolden packetを検証
 
 sourceが完成してもM0は完了ではありません。Windows実機の証跡とGate判定が必要です。
 

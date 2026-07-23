@@ -1,0 +1,49 @@
+name: Protocol
+
+on:
+  pull_request:
+    paths:
+      - "CMakeLists.txt"
+      - "protocol/**"
+      - ".github/workflows/protocol.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "CMakeLists.txt"
+      - "protocol/**"
+      - ".github/workflows/protocol.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: ${{ matrix.os }} conformance
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-2022
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: CMakeを設定
+        run: >
+          cmake -S . -B build/protocol-ci -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
+          -DDIVIVE_BUILD_OPENVR_PROBE=OFF
+          -DDIVIVE_BUILD_PROTOCOL=ON
+      - name: Protocolをbuild
+        run: >
+          cmake --build build/protocol-ci
+          --target divive_protocol_tests divive_protocol_golden_tool
+      - name: Conformance test
+        run: >
+          ctest --test-dir build/protocol-ci
+          --output-on-failure
+          -R divive_protocol_tests

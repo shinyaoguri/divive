@@ -1,8 +1,10 @@
 # 通信プロトコル
 
-Status: **Draft**
+Status: **Accepted (v1)**
 
-この文書はwire contractの設計基準です。具体的なFlatBuffers schemaとgolden vectorsを追加するPRでAcceptedへ変更します。
+この文書はwire contractの設計基準です。実装の正は
+[`protocol/schema/pose.fbs`](../protocol/schema/pose.fbs)と
+[`protocol/README.md`](../protocol/README.md)です。
 
 ## 通信レイヤー
 
@@ -46,29 +48,36 @@ serialが取得できないdeviceにはsession-scoped IDを割り当てますが
 
 ## Envelope
 
-UDP datagramは小さな固定長envelopeとFlatBuffers payloadで構成します。
+UDP datagramは72-byte固定長envelopeとFlatBuffers payloadで構成します。
 
-| Field | Purpose |
-| --- | --- |
-| magic | protocol誤認防止 |
-| protocol major/minor | compatibility |
-| message type | pose batch、status、probe |
-| flags | HMAC、compression等 |
-| session ID | Bridge process/session |
-| bridge ID | Bridge identity |
-| frame sequence | capture frameの単調増加番号 |
-| batch index/count | 同一frameの分割 |
-| payload length | bounds check |
-| auth tag | optional truncated HMAC |
+| Offset | Size | Field | Purpose |
+| ---: | ---: | --- | --- |
+| 0 | 4 | magic | ASCII `DVIV` |
+| 4 | 1 | protocol major | compatibility |
+| 5 | 1 | protocol minor | compatibility |
+| 6 | 1 | message type | v1はpose batch |
+| 7 | 1 | flags | HMAC等 |
+| 8 | 2 | header length | v1は72 |
+| 10 | 2 | payload length | bounds check |
+| 12 | 2 | batch index | 同一frameの分割 |
+| 14 | 2 | batch count | 同一frameの分割 |
+| 16 | 16 | session ID | Bridge process/session |
+| 32 | 16 | bridge ID | Bridge identity |
+| 48 | 8 | frame sequence | capture frameの単調増加番号 |
+| 56 | 16 | auth tag | 将来のtruncated HMAC |
 
 数値はnetwork byte orderとし、C/C++ structのmemory layoutをそのまま送信しません。
+FlatBuffers payload内部はFlatBuffers runtimeの規約に従います。
+
+M1ではflagsは`0`、auth tagは全byte `0`だけを許可します。予約済み機能を暗黙に
+受理せず、未対応flagはpacket単位で拒否します。
 
 ## Pose frame
 
-Frame metadata:
+Frame metadata（envelopeとFlatBuffers payloadの組み合わせ）:
 
-- `bridge_id`
-- `session_id`
+- `bridge_id`（envelope）
+- `session_id`（envelope）
 - `tracking_space_id`
 - `space_epoch`
 - `frame_sequence`
@@ -97,7 +106,8 @@ roleはHubを正とします。Bridgeがruntime roleを報告する場合も、`
 
 ## Datagram sizeとbatch分割
 
-IP fragmentationを避けるため、既定の最大UDP payloadを1,200 bytesにします。
+IP fragmentationを避けるため、datagram全体を最大1,200 bytesにします。72-byte
+envelopeを除いたFlatBuffers payload budgetは1,128 bytesです。
 
 - 1 capture tickが複数datagramに分かれてよい
 - batchは同じ`frame_sequence`とcapture timeを持つ
@@ -117,7 +127,8 @@ Hubは`session_id + bridge_id`ごとにsequenceを管理します。
 - 古いsequence: metricsへ計上し、poseへ反映しない
 - session ID変更: Bridge restartとしてsequence windowをリセット
 
-32-bit sequenceを使う場合はwrap-around比較を定義します。実装前に64-bitを第一候補としてpayloadコストを確認します。
+sequenceは64-bit unsigned integerとします。session変更時に比較windowを
+リセットするため、通常運用でのwrap-around処理は不要です。
 
 ## 時刻
 
@@ -236,9 +247,9 @@ JSON APIは人間が読めることを優先し、binary wire layoutを模倣し
 
 ## 未決定事項
 
-- FlatBuffers schemaの正確なfield ID
-- 64-bit sequence
-- checksumをHMACなしpacketにも付けるか
 - Bridge control connectionのdiscovery手順
 - native clientをUDP登録するhandshake
 - JSON WebSocketのrate limit
+
+HMACなしpacketには独自checksumを追加しません。UDP checksum、length検査、
+FlatBuffers verifierを使い、送信元認証が必要な段階でHMACを有効化します。

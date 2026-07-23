@@ -109,6 +109,10 @@ Bridgeは複数台接続できます。各Bridgeの追跡空間は独立して�
 
 M0用の[OpenVR実機検証probe](bridge/probes/openvr/README.md)は実装済みです。Windows x86-64 artifactをbuildし、[実機検証手順](hardware-tests/README.md)に従ってH0/H1から実行します。
 
+M0と並行可能な[wire protocol v1](protocol/README.md)は実装済みです。72-byte
+envelope、FlatBuffers schema、C++ codec、golden packetをprotocol conformance
+testで固定しています。
+
 ## ライセンス
 
 未決定です。外部公開や第三者への配布前に決定します。
