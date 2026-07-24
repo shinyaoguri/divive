@@ -31,6 +31,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] static / circle、30 / 60 / 90 / 120Hz
 - [x] seed付きframe loss / tracking lost
 - [x] SwiftUI Simulator GUIの開始・停止、上面図、Tracker一覧、基本metrics
+- [x] SwiftUI GUIのUDP / Simulator source切替とNetwork metrics
 - [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
@@ -224,13 +225,15 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 
 ### D3. GUI
 
-- [ ] Network BridgeとTracker一覧
+- [x] UDP Network sourceとTracker一覧
+- [ ] Windows実機BridgeとのGUI結合
 - [x] Simulator Tracker一覧
 - [x] X / -Z上面図
 - [ ] RealityKitによる3D pose表示
 - [x] tracking、lost、disconnected、simulated
 - [x] Simulator rate、frame loss、age、deadline miss
-- [ ] Network loss、out-of-order、jitter
+- [x] Network loss、duplicate、out-of-order、invalid packet
+- [ ] Network jitter、clock mapping、one-way latency推定
 - [ ] roleとprofile編集
 - [ ] record/playback操作
 - [x] Simulatorの開始、停止、設定反映

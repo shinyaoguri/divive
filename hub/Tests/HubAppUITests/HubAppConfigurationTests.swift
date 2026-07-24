@@ -1,10 +1,25 @@
 @testable import HubAppUI
+import Combine
 import HubCore
 import HubProtocol
 import HubSimulator
 import XCTest
 
 final class HubAppConfigurationTests: XCTestCase {
+  @MainActor
+  func testSource未開始のrefreshはUI更新をpublishしない() async {
+    let model = HubAppModel()
+    var notifications = 0
+    let observation = model.objectWillChange.sink {
+      notifications += 1
+    }
+
+    await model.refresh()
+
+    XCTAssertEqual(notifications, 0)
+    withExtendedLifetime(observation) {}
+  }
+
   func testGUI設定から既定roleと円運動を生成する() throws {
     var simulator = try configuration(
       trackerCount: 5,

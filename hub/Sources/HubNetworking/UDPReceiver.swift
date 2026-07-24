@@ -36,6 +36,8 @@ public struct ReceiverStatistics: Equatable, Sendable {
   public var lastReceiveMonotonicNS: UInt64 = 0
   public var lastProcessingTimeNS: UInt64 = 0
   public var lastDecodeError: String?
+
+  public init() {}
 }
 
 /// 受信callbackはSwiftNIO event loop上で呼ばれる。重い処理やdisk I/Oを行わないこと。
@@ -102,6 +104,10 @@ public final class UDPReceiver: @unchecked Sendable {
 
   public func statistics() -> ReceiverStatistics {
     statisticsStore.snapshot()
+  }
+
+  public func isActive() -> Bool {
+    lifecycleLock.withLock { channel?.isActive ?? false }
   }
 
   public func close() throws {

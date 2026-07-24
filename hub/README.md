@@ -27,7 +27,7 @@ Packageは次の責務に分けています。
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
 | `HubSimulator` | 固定step motion、Tracker編集、seed付き障害注入 |
-| `HubAppUI` | Simulator runtime、10Hz latest snapshot、SwiftUI画面 |
+| `HubAppUI` | UDP / Simulator runtime、source切替、10Hz latest snapshot、SwiftUI画面 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 | `divive-simulator` | Headless Simulatorの実時間CLI |
 | `divive-hub-app` | macOS SwiftUI開発用GUI |
@@ -92,8 +92,8 @@ cd hub
 swift run divive-hub-app
 ```
 
-左側でTracker数、motion、更新頻度、seed、frame loss、tracking lostを設定して
-「開始」を押します。詳細は[GUI.md](GUI.md)を参照してください。
+左側でUDP受信またはSimulatorを選び、bind/portまたはSimulator sceneを設定して
+開始します。詳細は[GUI.md](GUI.md)を参照してください。
 
 ## CLI
 
@@ -149,7 +149,8 @@ commit済みbindingのbyte一致を検査します。
 - BridgeとHubのmonotonic clock offsetは未推定のため、one-way latencyを断定しない
 - HMAC、sender allowlist、control channelは未実装
 - liveness遷移eventの購読APIは未実装
-- Network receiverとGUIのsource切替は未実装
+- Windows実機BridgeとのGUI結合は未検証
+- HMAC、allowlist、clock mapping、jitter推定は未実装
 - 3D表示、calibration、role永続化、content配信は未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる

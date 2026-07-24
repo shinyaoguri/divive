@@ -122,8 +122,8 @@ ageに基づくlost / disconnected評価、CLI診断まで実装済みです。W
 決定論的なvirtual Tracker姿勢と再現可能なframe loss / tracking lostを同じ
 Hub入力へ供給します。
 
-[Mac Hub GUI](hub/GUI.md)はHeadless SimulatorをSwiftUIから操作し、1〜16台の姿勢を
-上面図と一覧で確認できます。現段階ではSimulator専用の開発用実行形式です。
+[Mac Hub GUI](hub/GUI.md)はUDP Network sourceとHeadless Simulatorを切り替え、
+姿勢を上面図と一覧で確認できます。現段階では開発用実行形式です。
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
