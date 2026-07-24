@@ -2,9 +2,10 @@ import HubProtocol
 
 public struct TrackerHistorySample: Equatable, Identifiable, Sendable {
   public let sampledAtNS: UInt64
-  public let position: Vector3
   public let trackingState: TrackingState
   public let frameSequence: UInt64
+  /// 前回のGUI sample以降にSource全体で検出した欠落frame数。
+  public let frameLossCount: UInt64
 
   public var id: UInt64 { sampledAtNS }
 }
@@ -12,6 +13,7 @@ public struct TrackerHistorySample: Equatable, Identifiable, Sendable {
 struct TrackerHistoryBuffer {
   private let capacity: Int
   private(set) var samplesByTrackerID: [String: [TrackerHistorySample]] = [:]
+  private var previousCumulativeFrameLoss: UInt64?
 
   init(capacity: Int = 61) {
     precondition(capacity > 0)
@@ -20,12 +22,26 @@ struct TrackerHistoryBuffer {
 
   mutating func reset() {
     samplesByTrackerID.removeAll(keepingCapacity: true)
+    previousCumulativeFrameLoss = nil
   }
 
   mutating func record(
     trackers: [TrackerDisplayState],
-    sampledAtNS: UInt64
+    sampledAtNS: UInt64,
+    cumulativeFrameLoss: UInt64 = 0
   ) {
+    let frameLossCount: UInt64
+    if let previousCumulativeFrameLoss,
+      cumulativeFrameLoss >= previousCumulativeFrameLoss
+    {
+      frameLossCount =
+        cumulativeFrameLoss - previousCumulativeFrameLoss
+    } else {
+      // Source開始直後、またはcounter reset後の値も取りこぼさない。
+      frameLossCount = cumulativeFrameLoss
+    }
+    previousCumulativeFrameLoss = cumulativeFrameLoss
+
     let activeIDs = Set(trackers.map(\.id))
     samplesByTrackerID = samplesByTrackerID.filter {
       activeIDs.contains($0.key)
@@ -40,7 +56,9 @@ struct TrackerHistoryBuffer {
       }
       if let latest = samples.last,
         latest.frameSequence == tracker.frameSequence,
-        latest.trackingState == tracker.trackingState
+        latest.trackingState == tracker.trackingState,
+        frameLossCount == 0,
+        tracker.trackingState.hasUsablePoseForHistory
       {
         continue
       }
@@ -48,9 +66,9 @@ struct TrackerHistoryBuffer {
       samples.append(
         TrackerHistorySample(
           sampledAtNS: sampledAtNS,
-          position: tracker.position,
           trackingState: tracker.trackingState,
-          frameSequence: tracker.frameSequence
+          frameSequence: tracker.frameSequence,
+          frameLossCount: frameLossCount
         )
       )
       if samples.count > capacity {
@@ -58,5 +76,11 @@ struct TrackerHistoryBuffer {
       }
       samplesByTrackerID[tracker.id] = samples
     }
+  }
+}
+
+extension TrackingState {
+  fileprivate var hasUsablePoseForHistory: Bool {
+    self == .tracking || self == .simulated
   }
 }

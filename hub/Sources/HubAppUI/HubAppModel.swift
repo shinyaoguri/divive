@@ -276,7 +276,8 @@ public final class HubAppModel: ObservableObject {
     publish(snapshot.metrics.missedDeadlines, to: \.missedDeadlines)
     updateTrackers(
       snapshot.hubState.trackers.map(TrackerDisplayState.init),
-      sampledAtNS: snapshot.monotonicNS
+      sampledAtNS: snapshot.monotonicNS,
+      cumulativeFrameLoss: snapshot.metrics.droppedFrames
     )
     if let runtimeError = snapshot.metrics.lastError {
       errorMessage = "Simulatorが停止しました: \(runtimeError)"
@@ -309,17 +310,20 @@ public final class HubAppModel: ObservableObject {
     )
     updateTrackers(
       snapshot.hubState.trackers.map(TrackerDisplayState.init),
-      sampledAtNS: snapshot.monotonicNS
+      sampledAtNS: snapshot.monotonicNS,
+      cumulativeFrameLoss: receiver.missingFrames
     )
   }
 
   private func updateTrackers(
     _ trackers: [TrackerDisplayState],
-    sampledAtNS: UInt64
+    sampledAtNS: UInt64,
+    cumulativeFrameLoss: UInt64
   ) {
     trackerHistoryBuffer.record(
       trackers: trackers,
-      sampledAtNS: sampledAtNS
+      sampledAtNS: sampledAtNS,
+      cumulativeFrameLoss: cumulativeFrameLoss
     )
     publish(trackers, to: \.trackers)
     publish(

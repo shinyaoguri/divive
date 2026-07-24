@@ -42,6 +42,49 @@ final class TrackerHistoryTests: XCTestCase {
     )
   }
 
+  func test追跡喪失中は同じframeでも時系列sampleを継続する() {
+    var buffer = TrackerHistoryBuffer()
+
+    buffer.record(
+      trackers: [tracker(sequence: 1, state: .lost)],
+      sampledAtNS: 100
+    )
+    buffer.record(
+      trackers: [tracker(sequence: 1, state: .lost)],
+      sampledAtNS: 200
+    )
+
+    XCTAssertEqual(
+      buffer.samplesByTrackerID["tracker-1"]?.map(\.sampledAtNS),
+      [100, 200]
+    )
+  }
+
+  func test累積欠落数をGUI区間ごとの差分として記録する() {
+    var buffer = TrackerHistoryBuffer()
+
+    buffer.record(
+      trackers: [tracker(sequence: 1)],
+      sampledAtNS: 100,
+      cumulativeFrameLoss: 2
+    )
+    buffer.record(
+      trackers: [tracker(sequence: 2)],
+      sampledAtNS: 200,
+      cumulativeFrameLoss: 5
+    )
+    buffer.record(
+      trackers: [tracker(sequence: 3)],
+      sampledAtNS: 300,
+      cumulativeFrameLoss: 1
+    )
+
+    XCTAssertEqual(
+      buffer.samplesByTrackerID["tracker-1"]?.map(\.frameLossCount),
+      [2, 3, 1]
+    )
+  }
+
   func test現在存在しないTrackerの履歴を破棄する() {
     var buffer = TrackerHistoryBuffer()
     buffer.record(
@@ -67,6 +110,27 @@ final class TrackerHistoryTests: XCTestCase {
 
     XCTAssertEqual(
       buffer.samplesByTrackerID["tracker-1"]?.map(\.frameSequence),
+      [1]
+    )
+  }
+
+  func testReset後は累積欠落数を新しいSourceの値として記録する() {
+    var buffer = TrackerHistoryBuffer()
+    buffer.record(
+      trackers: [tracker(sequence: 1)],
+      sampledAtNS: 100,
+      cumulativeFrameLoss: 4
+    )
+
+    buffer.reset()
+    buffer.record(
+      trackers: [tracker(sequence: 1)],
+      sampledAtNS: 200,
+      cumulativeFrameLoss: 1
+    )
+
+    XCTAssertEqual(
+      buffer.samplesByTrackerID["tracker-1"]?.map(\.frameLossCount),
       [1]
     )
   }

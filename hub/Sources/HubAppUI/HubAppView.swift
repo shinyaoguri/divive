@@ -655,7 +655,7 @@ private struct SelectedTrackerPanel: View {
         PositionValue(axis: "Z", value: tracker.position.z)
       }
 
-      TrackerPositionHistory(
+      TrackerQualityHistory(
         history: history,
         height: usesCompactLayout ? 62 : 82
       )
@@ -671,34 +671,15 @@ private struct SelectedTrackerPanel: View {
   }
 }
 
-private enum TrackerHistoryAxis: String, CaseIterable, Identifiable {
-  case x = "X"
-  case y = "Y"
-  case z = "Z"
-
-  var id: Self { self }
-
-  var color: Color {
-    switch self {
-    case .x: .blue
-    case .y: .green
-    case .z: .orange
-    }
-  }
-
-  func value(in position: Vector3) -> Double {
-    switch self {
-    case .x: Double(position.x)
-    case .y: Double(position.y)
-    case .z: Double(position.z)
-    }
-  }
+private struct TrackerQualityInterval: Identifiable {
+  let id: UInt64
+  let startSeconds: Double
+  let endSeconds: Double
 }
 
-private struct TrackerPositionHistory: View {
+private struct TrackerQualityHistory: View {
   let history: [TrackerHistorySample]
   let height: CGFloat
-  @State private var selectedAxis: TrackerHistoryAxis = .x
 
   private let visibleDurationSeconds = 6.0
 
@@ -716,40 +697,102 @@ private struct TrackerPositionHistory: View {
     visibleSamples.last?.sampledAtNS ?? 0
   }
 
-  private var yDomain: ClosedRange<Double> {
-    let values = visibleSamples.map {
-      selectedAxis.value(in: $0.position)
+  private var frameLossIntervals: [TrackerQualityInterval] {
+    visibleSamples.enumerated().compactMap { index, sample in
+      guard sample.frameLossCount > 0 else { return nil }
+      let endSeconds = seconds(for: sample)
+      let startSeconds =
+        index > 0
+        ? seconds(for: visibleSamples[index - 1])
+        : max(-visibleDurationSeconds, endSeconds - 0.1)
+      return TrackerQualityInterval(
+        id: sample.sampledAtNS,
+        startSeconds: startSeconds,
+        endSeconds: endSeconds
+      )
     }
-    guard let minimum = values.min(), let maximum = values.max() else {
-      return -0.01...0.01
+  }
+
+  private var trackingLossIntervals: [TrackerQualityInterval] {
+    var intervals: [TrackerQualityInterval] = []
+    var lossStartIndex: Int?
+
+    for (index, sample) in visibleSamples.enumerated() {
+      if !sample.trackingState.hasUsablePose {
+        lossStartIndex = lossStartIndex ?? index
+        continue
+      }
+      guard let startIndex = lossStartIndex else { continue }
+      let startSample = visibleSamples[startIndex]
+      intervals.append(
+        TrackerQualityInterval(
+          id: startSample.sampledAtNS,
+          startSeconds: seconds(for: startSample),
+          endSeconds: seconds(for: sample)
+        )
+      )
+      lossStartIndex = nil
     }
-    let span = maximum - minimum
-    let padding = max(span * 0.12, 0.01)
-    return (minimum - padding)...(maximum + padding)
+
+    if let startIndex = lossStartIndex {
+      let startSample = visibleSamples[startIndex]
+      intervals.append(
+        TrackerQualityInterval(
+          id: startSample.sampledAtNS,
+          startSeconds: seconds(for: startSample),
+          endSeconds: 0
+        )
+      )
+    }
+    return intervals
+  }
+
+  private var trackingLossStarts: [TrackerHistorySample] {
+    visibleSamples.enumerated().compactMap { index, sample in
+      guard !sample.trackingState.hasUsablePose else { return nil }
+      guard
+        index == 0
+          || visibleSamples[index - 1].trackingState.hasUsablePose
+      else {
+        return nil
+      }
+      return sample
+    }
+  }
+
+  private var frameLossTotal: UInt64 {
+    visibleSamples.reduce(0) {
+      $0 + $1.frameLossCount
+    }
+  }
+
+  private var hasTrackingLoss: Bool {
+    visibleSamples.contains {
+      !$0.trackingState.hasUsablePose
+    }
   }
 
   private var accessibilityValue: String {
-    let values = visibleSamples.map {
-      selectedAxis.value(in: $0.position)
-    }
-    guard let current = values.last,
-      let minimum = values.min(),
-      let maximum = values.max()
-    else {
+    guard !visibleSamples.isEmpty else {
       return "履歴はまだありません"
     }
-    return String(
-      format: "現在 %.3fメートル、最小 %.3f、最大 %.3f",
-      current,
-      minimum,
-      maximum
-    )
+    let trackingDescription =
+      hasTrackingLoss ? "追跡喪失あり" : "追跡喪失なし"
+    return
+      "フレーム欠落\(frameLossTotal)件、\(trackingDescription)"
+  }
+
+  private func seconds(
+    for sample: TrackerHistorySample
+  ) -> Double {
+    let ageNanoseconds = latestTimestamp - sample.sampledAtNS
+    return -Double(ageNanoseconds) / 1_000_000_000
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
-        Text("位置の推移")
+        Text("品質の推移")
           .font(.caption.weight(.semibold))
 
         Text("直近6秒")
@@ -758,18 +801,31 @@ private struct TrackerPositionHistory: View {
 
         Spacer()
 
-        Picker("表示軸", selection: $selectedAxis) {
-          ForEach(TrackerHistoryAxis.allCases) { axis in
-            Text(axis.rawValue).tag(axis)
+        Group {
+          if frameLossTotal == 0, !hasTrackingLoss {
+            Label("異常なし", systemImage: "checkmark.circle.fill")
+              .foregroundStyle(.green)
+          } else {
+            HStack(spacing: 8) {
+              if frameLossTotal > 0 {
+                Label(
+                  "\(frameLossTotal)件",
+                  systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(.orange)
+              }
+              if hasTrackingLoss {
+                Label("喪失", systemImage: "eye.slash.fill")
+                  .foregroundStyle(.red)
+              }
+            }
           }
         }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .frame(width: 104)
+        .font(.caption2.weight(.medium))
       }
 
-      if visibleSamples.count < 2 {
-        Text("動きを取得するとグラフが表示されます")
+      if visibleSamples.isEmpty {
+        Text("受信を開始すると品質履歴が表示されます")
           .font(.caption)
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 70)
@@ -778,40 +834,63 @@ private struct TrackerPositionHistory: View {
             in: RoundedRectangle(cornerRadius: 8)
           )
       } else {
-        Chart(visibleSamples) { sample in
-          let ageNanoseconds = latestTimestamp - sample.sampledAtNS
-          let seconds = -Double(ageNanoseconds) / 1_000_000_000
-
-          LineMark(
-            x: .value("時間", seconds),
-            y: .value(
-              "\(selectedAxis.rawValue)座標",
-              selectedAxis.value(in: sample.position)
-            )
+        Chart {
+          RuleMark(
+            y: .value("フレーム欠落", 1.5)
           )
-          .foregroundStyle(selectedAxis.color)
+          .foregroundStyle(Color.secondary.opacity(0.22))
           .lineStyle(
             StrokeStyle(
-              lineWidth: 2,
+              lineWidth: 1,
               lineCap: .round,
               lineJoin: .round
             )
           )
 
-          if !sample.trackingState.hasUsablePose {
+          RuleMark(
+            y: .value("追跡状態", 0.5)
+          )
+          .foregroundStyle(Color.green.opacity(0.38))
+          .lineStyle(
+            StrokeStyle(
+              lineWidth: 2,
+              lineCap: .round
+            )
+          )
+
+          ForEach(frameLossIntervals) { interval in
+            RectangleMark(
+              xStart: .value("検出区間の開始", interval.startSeconds),
+              xEnd: .value("検出区間の終了", interval.endSeconds),
+              yStart: .value("欠落lane下端", 1.18),
+              yEnd: .value("欠落lane上端", 1.82)
+            )
+            .foregroundStyle(Color.orange.opacity(0.82))
+            .cornerRadius(2)
+          }
+
+          ForEach(trackingLossIntervals) { interval in
+            RectangleMark(
+              xStart: .value("喪失区間の開始", interval.startSeconds),
+              xEnd: .value("喪失区間の終了", interval.endSeconds),
+              yStart: .value("追跡lane下端", 0.18),
+              yEnd: .value("追跡lane上端", 0.82)
+            )
+            .foregroundStyle(Color.red.opacity(0.72))
+            .cornerRadius(2)
+          }
+
+          ForEach(trackingLossStarts) { sample in
             PointMark(
-              x: .value("時間", seconds),
-              y: .value(
-                "\(selectedAxis.rawValue)座標",
-                selectedAxis.value(in: sample.position)
-              )
+              x: .value("追跡喪失の検出時刻", seconds(for: sample)),
+              y: .value("追跡状態", 0.5)
             )
             .foregroundStyle(.red)
-            .symbolSize(24)
+            .symbolSize(18)
           }
         }
         .chartXScale(domain: -visibleDurationSeconds...0)
-        .chartYScale(domain: yDomain)
+        .chartYScale(domain: 0...2)
         .chartXAxis {
           AxisMarks(values: [-visibleDurationSeconds, 0]) { value in
             AxisGridLine()
@@ -828,20 +907,14 @@ private struct TrackerPositionHistory: View {
         .chartYAxis {
           AxisMarks(
             position: .leading,
-            values: .automatic(desiredCount: 3)
+            values: [0.5, 1.5]
           ) { value in
-            AxisGridLine()
-              .foregroundStyle(Color.secondary.opacity(0.1))
             AxisValueLabel {
               if let number = value.as(Double.self) {
-                Text(
-                  number.formatted(
-                    .number.precision(.fractionLength(2))
-                  )
-                )
+                Text(number < 1 ? "追跡" : "欠落")
               }
             }
-            .font(.caption2.monospacedDigit())
+            .font(.caption2)
             .foregroundStyle(.tertiary)
           }
         }
@@ -852,13 +925,14 @@ private struct TrackerPositionHistory: View {
         }
         .frame(height: height)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-          "\(selectedAxis.rawValue)座標の直近6秒の推移"
-        )
+        .accessibilityLabel("直近6秒の品質の推移")
         .accessibilityValue(accessibilityValue)
+        .help(
+          "欠落はSource全体で検出した区間、追跡は選択Trackerの状態です"
+        )
       }
     }
-    .accessibilityIdentifier("tracker-position-history")
+    .accessibilityIdentifier("tracker-quality-history")
   }
 }
 
