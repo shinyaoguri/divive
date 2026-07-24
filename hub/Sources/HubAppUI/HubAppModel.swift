@@ -79,8 +79,7 @@ public final class HubAppModel: ObservableObject {
 
   private let simulatorRuntime: SimulatorRuntime
   private let networkRuntime: NetworkRuntime
-  private var previousSample:
-    (source: HubInputSource, monotonicNS: UInt64, generation: UInt64)?
+  private var previousSample: (source: HubInputSource, monotonicNS: UInt64, generation: UInt64)?
 
   public init(
     simulatorRuntime: SimulatorRuntime = SimulatorRuntime(),
@@ -95,10 +94,10 @@ public final class HubAppModel: ObservableObject {
   }
 
   public var statusTitle: String {
-    guard let activeSource else { return "Source停止中" }
+    guard let activeSource else { return "停止中" }
     return switch (activeSource, isRunning) {
     case (.network, true): "UDP受信中"
-    case (.network, false): "UDP受信停止中"
+    case (.network, false): "受信停止中"
     case (.simulator, true): "Simulator実行中"
     case (.simulator, false): "Simulator停止中"
     }

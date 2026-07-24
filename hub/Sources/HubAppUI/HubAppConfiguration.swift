@@ -86,12 +86,14 @@ public struct HubAppConfiguration: Equatable, Sendable {
 
   private func makeTrackers() -> [SimulatorTrackerConfiguration] {
     let center = Float(trackerCount - 1) / 2
+    // 16台でも既定の±2mプレビュー内へ収まるよう、全体幅を3m以内にする。
+    let spacing = min(0.4, 3 / Float(max(trackerCount - 1, 1)))
     return (0..<trackerCount).map { index in
       SimulatorTrackerConfiguration(
         trackerID: String(format: "sim://tracker/%03d", index + 1),
         role: role(for: index),
         position: Vector3(
-          x: (Float(index) - center) * 0.4,
+          x: (Float(index) - center) * spacing,
           y: 1,
           z: -1
         ),

@@ -15,43 +15,59 @@ swift run divive-hub-app
 ```
 
 ビルド後に`Divive Hub`ウィンドウが開きます。ツールバー左上の
-`UDP受信 / Simulator`トグルで入力Sourceを選び、「設定」で入力条件を指定してから
-「開始」または「受信開始」を押します。停止後も画面のsnapshot更新は続くため、
+`UDP受信 / Simulator`トグルで入力Sourceを選び、歯車ボタンで入力条件を指定してから
+「開始」または「受信開始」を押します。稼働中にSourceを切り替えた場合は、選択した
+Sourceへそのまま切り替わります。停止後も画面のsnapshot更新は続くため、
 既定では約250ms後に`Lost`、約2秒後に`Disconnected`へ変化することを確認できます。
+
+## 設計方針
+
+macOSの運用コンソールとして、空間の動きと異常の発見を主目的にしています。常時見る
+必要がない設定はツールバーのpopoverへ置き、入力状態、Tracker一覧、診断は一画面で
+確認できるようにしています。
+
+- プレビューを主役にし、装飾用のカードや見出しを重ねない
+- 入力状態、更新レート、台数は一つの状態表示へまとめる
+- Tracker一覧では全体を確認し、選択した1台だけ詳細を表示する
+- 正常時の診断は静かに表示し、異常時だけ色と具体的な文言で注意を促す
+- 同じ操作をツールバーと設定内へ重複させない
+- 標準controlとsystem fontを使い、OSの外観とアクセシビリティ設定へ追従する
 
 ## 画面構成
 
 ウィンドウ内にスクロール領域を作らず、次の固定レイアウトで情報を表示します。
 
-- ツールバー: `UDP受信 / Simulator`トグル、設定、開始・停止
-- ステータス行: Source状態、Hub更新レート、Tracker数、診断値
-- 左ペイン: Tracker空間の上面プレビュー
-- 右ペイン: Trackerのrole、ID、状態、位置、receive age
-- 設定popover: SimulatorまたはUDPの設定
+- ツールバー: `UDP受信 / Simulator`トグル、現在のSource設定、開始または停止
+- ライブ空間: X / -Z上面プレビューと、Source状態、更新レート、Tracker数
+- 右インスペクタ上部: 最大16台のTracker一覧
+- 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
+- 右インスペクタ下部: 現在のSourceに対応する診断値
+- 設定popover: 選択中のSourceだけを設定し、稼働中は「設定を反映」で再起動
 
-Trackerが8台以下なら1列、9〜16台なら2列で表示し、最大16台でも一覧内の
-スクロールを必要としません。ウィンドウを操作不能な大きさへ縮めないよう、
-最小サイズを1120×700ptに設定しています。
+Trackerは常に2列の選択可能な一覧として表示し、最大16台でも一覧内のスクロールを
+必要としません。選択Trackerは一覧とライブ空間の両方で強調します。8台を超える
+場合は空間上のrole表示を選択Trackerだけに絞ります。ウィンドウを操作不能な大きさへ
+縮めないよう、最小サイズを1120×700ptに設定しています。
 
-診断値はpopoverに隠さず、ステータス行と空間プレビューのヘッダーへ常時表示します。
-Simulatorではframe loss、deadline miss、attempted / emittedを、UDP受信では
-datagram、欠落frame、順序逆転、受信異常、受信処理時間を確認できます。
+診断値はpopoverに隠さず、右インスペクタ下部へ常時表示します。Simulatorでは
+生成、出力、frame loss、deadline missを、UDP受信ではdatagram、有効packet、
+欠落frame、順序逆転、受信異常、受信処理時間を確認できます。
 
 ## Liquid Glass
 
-macOS 26以降では、設定・開始・停止の操作にSwiftUIの`glass`または
-`glassProminent` button styleを使います。popover、toolbar、Sourceトグルなどの
-標準controlもOSが提供するLiquid Glassの外観とアクセシビリティ設定へ自動的に
-追従します。
+macOS 26以降では、toolbar、popover、segmented picker、buttonなどの標準controlが
+OSのLiquid Glassへ自動的に追従します。カスタムの`glassEffect`はライブ空間上の
+状態表示だけに使い、操作と状態の機能層をコンテンツから分離します。
 Liquid Glassとしてビルドする場合はXcode 26以降のSDKが必要です。古いXcodeでは
-コンパイル時にGlass APIを除外し、標準のbordered buttonを使います。
+コンパイル時にGlass APIを除外し、同じ場所へ標準materialを表示します。
 
 Appleの
 [Materials](https://developer.apple.com/design/human-interface-guidelines/materials)と
 [Adopting Liquid Glass](https://developer.apple.com/documentation/TechnologyOverviews/adopting-liquid-glass)
 に従い、Liquid Glassは操作とnavigationの機能層だけに使います。空間プレビューと
-Tracker一覧はGlassを重ねず、標準materialのコンテンツ層として表示します。
-macOS 14〜25では同じ情報階層を維持し、標準のbordered buttonへfallbackします。
+Tracker一覧へ個別のGlassカードを重ねません。透明度を下げるアクセシビリティ設定が
+有効な場合は、状態表示を不透明なsystem backgroundへ切り替えます。macOS 14〜25でも
+同じ情報階層を維持します。
 
 ## Simulator
 
@@ -62,8 +78,9 @@ macOS 14〜25では同じ情報階層を維持し、標準のbordered buttonへf
 - frame loss: 0〜50%
 - Tracker単位のtracking lost: 0〜50%
 - Simulatorの開始、設定を反映した再起動、停止
+- Tracker数が増えても、初期位置を±2mプレビュー内へ収める自動間隔
 
-設定は「開始」または「設定を反映して再起動」を押した時点で反映します。seedを含む
+設定は「開始」または「設定を反映」を押した時点で反映します。seedを含む
 設定が同一なら、Headless Simulatorのmotionとfault列も同一です。
 
 ## UDP受信
@@ -96,10 +113,10 @@ sender allowlistがないため、信頼できるprivate LANでのみ使って�
 ## 表示
 
 - Hub latest stateの実測更新レート
-- Hubへ入力したTracker数
+- Hubへ入力したTracker数と全体の追跡状態
 - X / -Z上面図。表示範囲は原点から±2m
-- Trackerごとのrole、恒久ID、実効tracking state
-- X / Y / Z位置、receive age
+- 全Trackerのrole、実効tracking state、receive age
+- 選択Trackerの恒久IDとX / Y / Z位置
 
 Simulatorでは累積frame loss率とdeadline miss数を表示します。UDP受信では次を
 表示します。

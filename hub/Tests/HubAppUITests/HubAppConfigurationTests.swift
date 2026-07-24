@@ -108,6 +108,17 @@ final class HubAppConfigurationTests: XCTestCase {
     )
   }
 
+  func test16台の初期位置をプレビュー範囲内に配置する() throws {
+    let simulator = try configuration(
+      trackerCount: 16
+    ).makeSimulator()
+    let xPositions = simulator.trackerConfigurations.map(\.position.x)
+
+    XCTAssertEqual(try XCTUnwrap(xPositions.min()), -1.5, accuracy: 0.0001)
+    XCTAssertEqual(try XCTUnwrap(xPositions.max()), 1.5, accuracy: 0.0001)
+    XCTAssertTrue(xPositions.allSatisfy { abs($0) <= 2 })
+  }
+
   func testRuntimeは生成を開始停止できる() async throws {
     let runtime = SimulatorRuntime()
     try await runtime.start(
