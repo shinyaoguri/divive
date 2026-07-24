@@ -185,7 +185,7 @@ public final class HubAppModel: ObservableObject {
     }
   }
 
-  /// SwiftUIの`.task`から呼び、画面表示中だけlatest stateを10Hzで読む。
+  /// メニューバーの`.task`から呼び、アプリ実行中はlatest stateを10Hzで読む。
   public func refreshUntilCancelled() async {
     while !Task.isCancelled {
       await refresh()

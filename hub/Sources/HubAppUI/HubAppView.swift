@@ -3,12 +3,12 @@ import HubSimulator
 import SwiftUI
 
 public struct HubAppView: View {
-  @StateObject private var model: HubAppModel
+  @ObservedObject private var model: HubAppModel
   @State private var showsConfiguration = false
   @State private var selectedTrackerID: String?
 
-  public init() {
-    _model = StateObject(wrappedValue: HubAppModel())
+  public init(model: HubAppModel) {
+    self.model = model
   }
 
   public var body: some View {
@@ -17,7 +17,6 @@ public struct HubAppView: View {
         model: model,
         selectedTrackerID: $selectedTrackerID
       )
-      .navigationTitle("Divive Hub")
       .toolbar {
         ToolbarItem(placement: .navigation) {
           SourcePicker(model: model)
@@ -43,13 +42,37 @@ public struct HubAppView: View {
       }
     }
     .frame(minWidth: 1_120, minHeight: 700)
-    .task {
-      await model.refreshUntilCancelled()
-    }
   }
 }
 
 private struct SourcePicker: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    sourceControl
+      .onChange(of: model.selectedSource) {
+        guard model.isRunning else { return }
+        Task {
+          await model.startSelectedSource()
+        }
+      }
+  }
+
+  @ViewBuilder
+  private var sourceControl: some View {
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *) {
+        LiquidGlassSourceToggle(model: model)
+      } else {
+        StandardSourcePicker(model: model)
+      }
+    #else
+      StandardSourcePicker(model: model)
+    #endif
+  }
+}
+
+private struct StandardSourcePicker: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
@@ -63,14 +86,138 @@ private struct SourcePicker: View {
     .pickerStyle(.segmented)
     .frame(width: 230)
     .accessibilityIdentifier("source-picker")
-    .onChange(of: model.selectedSource) {
-      guard model.isRunning else { return }
-      Task {
-        await model.startSelectedSource()
-      }
-    }
   }
 }
+
+#if compiler(>=6.2)
+  @available(macOS 26.0, *)
+  private struct LiquidGlassSourceToggle: View {
+    @ObservedObject var model: HubAppModel
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+
+    private let controlWidth: CGFloat = 246
+    private let controlHeight: CGFloat = 40
+    private let contentInset: CGFloat = 4
+
+    private var segmentWidth: CGFloat {
+      (controlWidth - contentInset * 2) / 2
+    }
+
+    private var selectionOffset: CGFloat {
+      contentInset
+        + (model.selectedSource == .simulator ? segmentWidth : 0)
+    }
+
+    private var selectionAnimation: Animation? {
+      guard !reduceMotion else { return nil }
+      return .spring(
+        response: 0.34,
+        dampingFraction: 1,
+        blendDuration: 0
+      )
+    }
+
+    var body: some View {
+      ZStack(alignment: .leading) {
+        selectionGlass
+          .frame(
+            width: segmentWidth,
+            height: controlHeight - contentInset * 2
+          )
+          .offset(x: selectionOffset)
+          .allowsHitTesting(false)
+          .zIndex(0)
+
+        HStack(spacing: 0) {
+          ForEach(HubInputSource.allCases) { source in
+            sourceButton(source)
+          }
+        }
+        .padding(.horizontal, contentInset)
+        .zIndex(1)
+      }
+      .frame(width: controlWidth, height: controlHeight)
+      .background {
+        Capsule()
+          .fill(
+            Color.primary.opacity(reduceTransparency ? 0.1 : 0.028)
+          )
+          .overlay {
+            Capsule()
+              .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+          }
+      }
+      .animation(selectionAnimation, value: model.selectedSource)
+      .accessibilityElement(children: .contain)
+      .accessibilityLabel("入力元")
+      .accessibilityIdentifier("source-picker")
+    }
+
+    @ViewBuilder
+    private var selectionGlass: some View {
+      if reduceTransparency {
+        Capsule()
+          .fill(Color.accentColor.opacity(0.2))
+          .overlay {
+            Capsule()
+              .stroke(Color.accentColor.opacity(0.38), lineWidth: 1)
+          }
+      } else {
+        Color.clear
+          .glassEffect(
+            .regular.tint(Color.accentColor.opacity(0.3)),
+            in: Capsule()
+          )
+      }
+    }
+
+    private func sourceButton(
+      _ source: HubInputSource
+    ) -> some View {
+      let isSelected = model.selectedSource == source
+
+      return Button {
+        guard !isSelected else { return }
+        model.selectedSource = source
+      } label: {
+        Text(source.shortDisplayName)
+          .font(.callout.weight(isSelected ? .semibold : .medium))
+          .foregroundStyle(
+            isSelected ? Color.primary : Color.secondary
+          )
+          .frame(
+            width: segmentWidth,
+            height: controlHeight - contentInset * 2
+          )
+          .contentShape(Capsule())
+      }
+      .buttonStyle(
+        SourceTogglePressStyle(reduceMotion: reduceMotion)
+      )
+      .accessibilityLabel(source.shortDisplayName)
+      .accessibilityValue(isSelected ? "選択中" : "未選択")
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
+      .accessibilityIdentifier("source-\(source.rawValue)-button")
+    }
+  }
+
+  private struct SourceTogglePressStyle: ButtonStyle {
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+      configuration.label
+        .scaleEffect(configuration.isPressed ? 0.97 : 1)
+        .opacity(configuration.isPressed ? 0.78 : 1)
+        .animation(
+          reduceMotion ? nil : .easeOut(duration: 0.1),
+          value: configuration.isPressed
+        )
+    }
+  }
+#endif
 
 private struct SourceActionButton: View {
   @ObservedObject var model: HubAppModel

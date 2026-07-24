@@ -2,6 +2,7 @@
 /dist/
 /hub/.build/
 /CMakeUserPresets.json
+.DS_Store
 
 # 実機のraw logとscreenshotはGitへ直接commitしない。
 /hardware-tests/runs/**/raw/*

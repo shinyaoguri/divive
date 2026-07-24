@@ -14,11 +14,21 @@ cd hub
 swift run divive-hub-app
 ```
 
-ビルド後に`Divive Hub`ウィンドウが開きます。ツールバー左上の
+ビルド後にHubウィンドウが開きます。ウィンドウタイトルは表示せず、ツールバー左上の
 `UDP受信 / Simulator`トグルで入力Sourceを選び、歯車ボタンで入力条件を指定してから
 「開始」または「受信開始」を押します。稼働中にSourceを切り替えた場合は、選択した
 Sourceへそのまま切り替わります。停止後も画面のsnapshot更新は続くため、
 既定では約250ms後に`Lost`、約2秒後に`Disconnected`へ変化することを確認できます。
+
+アプリの状態はメニューバーにも常時表示します。Hubウィンドウを閉じても監視は続き、
+`停止`、`待機`、正常時のTracker台数、`要確認`、`エラー`をアイコン形状と文字で
+区別します。メニューバー項目を開くと、問題の概要、入力元、実測更新レート、Tracker
+台数を確認でき、Hubウィンドウの再表示と入力の開始・停止も行えます。
+
+状態色は停止をグレー、受信待ちをブルー、正常をグリーン、注意をオレンジ、エラーを
+レッドに統一します。色だけに依存せず、pause、ellipsis、checkmark、warning、
+octagonの異なるsymbolと状態文字を併用します。エラー時だけsymbolを穏やかにpulse
+させ、動きを減らすアクセシビリティ設定ではpulseと色遷移を停止します。
 
 ## 設計方針
 
@@ -37,7 +47,9 @@ macOSの運用コンソールとして、空間の動きと異常の発見を主
 
 ウィンドウ内にスクロール領域を作らず、次の固定レイアウトで情報を表示します。
 
-- ツールバー: `UDP受信 / Simulator`トグル、現在のSource設定、開始または停止
+- メニューバー: ウィンドウを閉じても継続する状態監視と最小限の復旧操作
+- ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、現在のSource設定、
+  開始または停止
 - ライブ空間: X / -Z上面プレビューと、Source状態、更新レート、Tracker数
 - 右インスペクタ上部: 最大16台のTracker一覧
 - 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
@@ -57,17 +69,27 @@ Trackerは常に2列の選択可能な一覧として表示し、最大16台で�
 
 macOS 26以降では、toolbar、popover、segmented picker、buttonなどの標準controlが
 OSのLiquid Glassへ自動的に追従します。カスタムの`glassEffect`はライブ空間上の
-状態表示だけに使い、操作と状態の機能層をコンテンツから分離します。
+状態表示とSourceトグルの選択面だけに使い、操作と状態の機能層をコンテンツから
+分離します。
 Liquid Glassとしてビルドする場合はXcode 26以降のSDKが必要です。古いXcodeでは
 コンパイル時にGlass APIを除外し、同じ場所へ標準materialを表示します。
+
+Sourceトグルは一つのGlassカプセルを保持したまま、選択先へ臨界減衰スプリング
+（response 0.34、damping 1.0）で移動します。切替を連続して行っても、現在の
+表示位置から新しい目標へ追従するため、不連続な飛びや固定duration待ちはありません。
+文字はtoolbar上でも読める`callout`サイズとし、選択側だけweightを上げます。外側の
+カプセルはtoolbarのGlassと重なって濁らないよう、ほぼ透明なsystem foregroundを
+使い、選択面だけaccent tintを持たせます。クリック中は即座にわずかに縮小し、操作への
+応答を示します。動きを減らす設定では移動animationを無効化し、透明度を下げる設定では
+不透明な選択面へ切り替えます。macOS 14〜25では標準のsegmented pickerを使います。
 
 Appleの
 [Materials](https://developer.apple.com/design/human-interface-guidelines/materials)と
 [Adopting Liquid Glass](https://developer.apple.com/documentation/TechnologyOverviews/adopting-liquid-glass)
 に従い、Liquid Glassは操作とnavigationの機能層だけに使います。空間プレビューと
 Tracker一覧へ個別のGlassカードを重ねません。透明度を下げるアクセシビリティ設定が
-有効な場合は、状態表示を不透明なsystem backgroundへ切り替えます。macOS 14〜25でも
-同じ情報階層を維持します。
+有効な場合は、状態表示とSourceトグルを不透明なsystem surfaceへ切り替えます。
+macOS 14〜25でも同じ情報階層を維持します。
 
 ## Simulator
 
