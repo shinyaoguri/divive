@@ -48,8 +48,8 @@ macOSの運用コンソールとして、空間の動きと異常の発見を主
 ウィンドウ内にスクロール領域を作らず、次の固定レイアウトで情報を表示します。
 
 - メニューバー: ウィンドウを閉じても継続する状態監視と最小限の復旧操作
-- ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、現在のSource設定、
-  開始または停止
+- ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、開始または停止、
+  右端の現在Source設定
 - ライブ空間: X / -Z上面プレビューと、Source状態、更新レート、Tracker数
 - 右インスペクタ上部: 最大16台のTracker一覧
 - 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
@@ -82,6 +82,12 @@ Sourceトグルは一つのGlassカプセルを保持したまま、選択先へ
 使い、選択面だけaccent tintを持たせます。クリック中は即座にわずかに縮小し、操作への
 応答を示します。動きを減らす設定では移動animationを無効化し、透明度を下げる設定では
 不透明な選択面へ切り替えます。macOS 14〜25では標準のsegmented pickerを使います。
+
+開始・停止は入力切替の隣へ置き、設定は補助操作としてtoolbar右端へ分離します。
+macOS 26ではsystemの可変`ToolbarSpacer`を間に置き、設定を画面右端へ固定します。
+開始・停止ボタンのsymbolには横方向の余白を持たせ、円ではなく少し横長のsystem
+buttonとして表示します。独自背景を重ねず、標準の押下feedbackとLiquid Glassへの
+追従を維持します。
 
 Appleの
 [Materials](https://developer.apple.com/design/human-interface-guidelines/materials)と

@@ -23,6 +23,16 @@ public struct HubAppView: View {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
+          SourceActionButton(model: model)
+        }
+
+        #if compiler(>=6.2)
+          if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+          }
+        #endif
+
+        ToolbarItem(placement: .primaryAction) {
           Button {
             showsConfiguration = true
           } label: {
@@ -36,8 +46,6 @@ public struct HubAppView: View {
           ) {
             SourceConfigurationPanel(model: model)
           }
-
-          SourceActionButton(model: model)
         }
       }
     }
@@ -230,6 +238,8 @@ private struct SourceActionButton: View {
         }
       } label: {
         Label("停止", systemImage: "stop.fill")
+          .labelStyle(.iconOnly)
+          .frame(width: 28, height: 16)
       }
       .buttonStyle(.bordered)
       .help("\(model.displayedSource.displayName)を停止")
@@ -244,6 +254,8 @@ private struct SourceActionButton: View {
           model.selectedSource == .network ? "受信開始" : "開始",
           systemImage: "play.fill"
         )
+        .labelStyle(.iconOnly)
+        .frame(width: 28, height: 16)
       }
       .buttonStyle(.borderedProminent)
       .help("\(model.selectedSource.displayName)を開始")
