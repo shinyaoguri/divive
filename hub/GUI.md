@@ -14,31 +14,35 @@ cd hub
 swift run divive-hub-app
 ```
 
-ビルド後に`Divive Hub`ウィンドウが開きます。ツールバーで入力Sourceを選び、
-「設定」で入力条件を指定してから「開始」または「受信開始」を押します。停止後も
-画面のsnapshot更新は続くため、既定では約250ms後に`Lost`、約2秒後に
-`Disconnected`へ変化することを確認できます。
+ビルド後に`Divive Hub`ウィンドウが開きます。ツールバー左上の
+`UDP受信 / Simulator`トグルで入力Sourceを選び、「設定」で入力条件を指定してから
+「開始」または「受信開始」を押します。停止後も画面のsnapshot更新は続くため、
+既定では約250ms後に`Lost`、約2秒後に`Disconnected`へ変化することを確認できます。
 
 ## 画面構成
 
 ウィンドウ内にスクロール領域を作らず、次の固定レイアウトで情報を表示します。
 
-- ツールバー: Source選択、設定、診断、開始・停止
-- ヘッダー: Hub更新レート、Tracker数、Source状態
+- ツールバー: `UDP受信 / Simulator`トグル、設定、開始・停止
+- ステータス行: Source状態、Hub更新レート、Tracker数、診断値
 - 左ペイン: Tracker空間の上面プレビュー
 - 右ペイン: Trackerのrole、ID、状態、位置、receive age
 - 設定popover: SimulatorまたはUDPの設定
-- 診断popover: packetまたはSimulatorの詳細値
 
 Trackerが8台以下なら1列、9〜16台なら2列で表示し、最大16台でも一覧内の
 スクロールを必要としません。ウィンドウを操作不能な大きさへ縮めないよう、
 最小サイズを1120×700ptに設定しています。
 
+診断値はpopoverに隠さず、ステータス行と空間プレビューのヘッダーへ常時表示します。
+Simulatorではframe loss、deadline miss、attempted / emittedを、UDP受信では
+datagram、欠落frame、順序逆転、受信異常、受信処理時間を確認できます。
+
 ## Liquid Glass
 
-macOS 26以降では、設定・診断・開始・停止の操作にSwiftUIの`glass`または
-`glassProminent` button styleを使います。popover、toolbar、標準controlも
-OSが提供するLiquid Glassの外観とアクセシビリティ設定へ自動的に追従します。
+macOS 26以降では、設定・開始・停止の操作にSwiftUIの`glass`または
+`glassProminent` button styleを使います。popover、toolbar、Sourceトグルなどの
+標準controlもOSが提供するLiquid Glassの外観とアクセシビリティ設定へ自動的に
+追従します。
 Liquid Glassとしてビルドする場合はXcode 26以降のSDKが必要です。古いXcodeでは
 コンパイル時にGlass APIを除外し、標準のbordered buttonを使います。
 

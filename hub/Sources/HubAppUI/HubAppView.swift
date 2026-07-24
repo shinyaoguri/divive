@@ -5,7 +5,6 @@ import SwiftUI
 public struct HubAppView: View {
   @StateObject private var model: HubAppModel
   @State private var showsConfiguration = false
-  @State private var showsDiagnostics = false
 
   public init() {
     _model = StateObject(wrappedValue: HubAppModel())
@@ -22,7 +21,7 @@ public struct HubAppView: View {
 
           ToolbarItemGroup(placement: .primaryAction) {
             Button {
-              showsConfiguration.toggle()
+              showsConfiguration = true
             } label: {
               Label("設定", systemImage: "slider.horizontal.3")
             }
@@ -33,21 +32,6 @@ public struct HubAppView: View {
               arrowEdge: .top
             ) {
               SourceConfigurationPanel(model: model)
-            }
-            .diviveGlassButton()
-
-            Button {
-              showsDiagnostics.toggle()
-            } label: {
-              Label("診断", systemImage: "waveform.path.ecg")
-            }
-            .help("通信とSimulatorの診断情報")
-            .accessibilityIdentifier("diagnostics-button")
-            .popover(
-              isPresented: $showsDiagnostics,
-              arrowEdge: .top
-            ) {
-              DiagnosticsPopover(model: model)
             }
             .diviveGlassButton()
 
@@ -76,8 +60,9 @@ private struct SourcePicker: View {
           .tag(source)
       }
     }
-    .pickerStyle(.menu)
-    .frame(width: 150)
+    .labelsHidden()
+    .pickerStyle(.segmented)
+    .frame(width: 220)
     .accessibilityIdentifier("source-picker")
   }
 }
@@ -127,7 +112,7 @@ private struct HubDashboardView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      DashboardHeader(model: model)
+      HubStatusBar(model: model)
 
       HStack(spacing: 16) {
         SpatialPreviewPanel(model: model)
@@ -144,78 +129,132 @@ private struct HubDashboardView: View {
   }
 }
 
-private struct DashboardHeader: View {
+private struct HubStatusBar: View {
   @ObservedObject var model: HubAppModel
 
-  var body: some View {
-    HStack(spacing: 20) {
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 9) {
-          Image(systemName: "scope")
-            .font(.title2.weight(.semibold))
-            .foregroundStyle(.tint)
-
-          Text("Tracker空間")
-            .font(.title2.weight(.semibold))
-        }
-
-        Text(headerSubtitle)
-          .font(.subheadline)
-          .foregroundStyle(
-            model.errorMessage == nil ? .secondary : Color.red
-          )
-          .lineLimit(1)
-      }
-
-      Spacer(minLength: 16)
-
-      HeaderMetric(
+  private var metrics: [StatusMetricItem] {
+    var values = [
+      StatusMetricItem(
         title: "更新レート",
-        value: String(format: "%.1f Hz", model.observedRateHz),
-        systemImage: "waveform.path"
-      )
-
-      Divider()
-        .frame(height: 34)
-
-      HeaderMetric(
+        value: String(format: "%.1f Hz", model.observedRateHz)
+      ),
+      StatusMetricItem(
         title: "Tracker",
-        value: "\(model.trackers.count) 台",
-        systemImage: "dot.radiowaves.left.and.right"
-      )
+        value: "\(model.trackers.count) 台"
+      ),
+    ]
 
+    switch model.displayedSource {
+    case .simulator:
+      values.append(
+        contentsOf: [
+          StatusMetricItem(
+            title: "Frame loss",
+            value: String(format: "%.1f%%", model.droppedPercent)
+          ),
+          StatusMetricItem(
+            title: "Deadline miss",
+            value: "\(model.missedDeadlines)"
+          ),
+        ]
+      )
+    case .network:
+      values.append(
+        contentsOf: [
+          StatusMetricItem(
+            title: "Datagram",
+            value: "\(model.receivedDatagrams)"
+          ),
+          StatusMetricItem(
+            title: "欠落Frame",
+            value: "\(model.missingFrames)"
+          ),
+          StatusMetricItem(
+            title: "順序逆転",
+            value: "\(model.outOfOrderPackets)"
+          ),
+          StatusMetricItem(
+            title: "受信異常",
+            value: "\(model.networkAnomalyCount)"
+          ),
+          StatusMetricItem(
+            title: "受信処理",
+            value: "\(model.lastProcessingMicroseconds) µs"
+          ),
+        ]
+      )
+    }
+
+    return values
+  }
+
+  var body: some View {
+    HStack(spacing: 16) {
       StatusBadge(
         title: model.statusTitle,
         isActive: model.isRunning
       )
+
+      Divider()
+        .frame(height: 30)
+
+      ForEach(metrics) { metric in
+        CompactStatusMetric(metric: metric)
+      }
+
+      trailingStatus
     }
-    .frame(height: 54)
+    .padding(.horizontal, 14)
+    .frame(height: 52)
+    .background(
+      .regularMaterial,
+      in: RoundedRectangle(cornerRadius: 15)
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 15)
+        .stroke(.quaternary, lineWidth: 1)
+    }
+    .accessibilityIdentifier("hub-status-bar")
   }
 
-  private var headerSubtitle: String {
-    model.errorMessage ?? model.dashboardSubtitle
+  @ViewBuilder
+  private var trailingStatus: some View {
+    if let errorMessage = model.errorMessage {
+      Label(
+        errorMessage,
+        systemImage: "exclamationmark.triangle.fill"
+      )
+      .font(.caption)
+      .foregroundStyle(.red)
+      .lineLimit(1)
+    }
   }
 }
 
-private struct HeaderMetric: View {
+private struct StatusMetricItem: Identifiable {
   let title: String
   let value: String
-  let systemImage: String
+
+  var id: String { title }
+}
+
+private struct CompactStatusMetric: View {
+  let metric: StatusMetricItem
 
   var body: some View {
-    HStack(spacing: 9) {
-      Image(systemName: systemImage)
-        .foregroundStyle(.tint)
-        .frame(width: 20)
-
-      VStack(alignment: .leading, spacing: 1) {
-        Text(title)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Text(value)
-          .font(.headline.monospacedDigit())
-      }
+    VStack(alignment: .leading, spacing: 1) {
+      Text(metric.title)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+      Text(metric.value)
+        .font(.subheadline.monospacedDigit().weight(.semibold))
+        .lineLimit(1)
     }
+    .frame(
+      minWidth: 70,
+      maxWidth: .infinity,
+      alignment: .leading
+    )
     .accessibilityElement(children: .combine)
   }
 }
@@ -607,94 +646,6 @@ private struct ErrorBanner: View {
   }
 }
 
-private struct DiagnosticsPopover: View {
-  @ObservedObject var model: HubAppModel
-
-  private var items: [DiagnosticItem] {
-    switch model.displayedSource {
-    case .simulator:
-      [
-        DiagnosticItem(
-          title: "Attempted",
-          value: "\(model.attemptedFrames)"
-        ),
-        DiagnosticItem(
-          title: "Emitted",
-          value: "\(model.emittedFrames)"
-        ),
-        DiagnosticItem(
-          title: "Frame loss",
-          value: String(format: "%.1f%%", model.droppedPercent)
-        ),
-        DiagnosticItem(
-          title: "Deadline miss",
-          value: "\(model.missedDeadlines)"
-        ),
-      ]
-    case .network:
-      [
-        DiagnosticItem(
-          title: "Datagram",
-          value: "\(model.receivedDatagrams)"
-        ),
-        DiagnosticItem(
-          title: "Valid",
-          value: "\(model.validPackets)"
-        ),
-        DiagnosticItem(
-          title: "欠落Frame",
-          value: "\(model.missingFrames)"
-        ),
-        DiagnosticItem(
-          title: "順序逆転",
-          value: "\(model.outOfOrderPackets)"
-        ),
-        DiagnosticItem(
-          title: "受信異常",
-          value: "\(model.networkAnomalyCount)"
-        ),
-        DiagnosticItem(
-          title: "受信処理",
-          value: "\(model.lastProcessingMicroseconds) µs"
-        ),
-      ]
-    }
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      PopoverHeader(
-        title: "診断情報",
-        subtitle: model.displayedSource.displayName,
-        systemImage: "waveform.path.ecg"
-      )
-
-      LazyVGrid(
-        columns: [
-          GridItem(.flexible(), spacing: 10),
-          GridItem(.flexible(), spacing: 10),
-        ],
-        spacing: 10
-      ) {
-        ForEach(items) { item in
-          DiagnosticValue(item: item)
-        }
-      }
-
-      if model.activeSource == .network,
-        let endpoint = model.boundEndpoint
-      {
-        Label(endpoint, systemImage: "network")
-          .font(.caption.monospaced())
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-    }
-    .padding(20)
-    .frame(width: 370)
-  }
-}
-
 private struct PopoverHeader: View {
   let title: String
   let subtitle: String
@@ -719,35 +670,6 @@ private struct PopoverHeader: View {
           .foregroundStyle(.secondary)
       }
     }
-  }
-}
-
-private struct DiagnosticItem: Identifiable {
-  let title: String
-  let value: String
-
-  var id: String { title }
-}
-
-private struct DiagnosticValue: View {
-  let item: DiagnosticItem
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(item.title)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      Text(item.value)
-        .font(.title3.monospacedDigit().weight(.semibold))
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-    }
-    .padding(11)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      Color.secondary.opacity(0.065),
-      in: RoundedRectangle(cornerRadius: 11)
-    )
   }
 }
 
