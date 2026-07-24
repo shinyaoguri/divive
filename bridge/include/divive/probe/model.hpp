@@ -99,21 +99,46 @@ struct PoseFrame {
     std::vector<PoseSample> devices;
 };
 
+struct SchedulerInfo {
+    std::string backend;
+    bool high_resolution = false;
+};
+
 struct DeviceStatistics {
     std::uint64_t samples = 0;
     std::uint64_t connected_samples = 0;
     std::uint64_t valid_pose_samples = 0;
+    std::uint64_t running_ok_pose_samples = 0;
+    std::uint64_t degraded_valid_pose_samples = 0;
     std::uint64_t unique_pose_samples = 0;
     std::uint64_t identical_pose_samples = 0;
+    std::map<TrackingResult, std::uint64_t> tracking_result_samples;
+    double max_position_step_m = 0.0;
+    double max_derived_speed_mps = 0.0;
+    double max_speed_mismatch_mps = 0.0;
+    std::uint64_t kinematic_discontinuity_samples = 0;
+    std::uint64_t kinematic_discontinuity_running_ok_samples = 0;
 };
 
 struct ProbeSummary {
     std::uint64_t elapsed_ns = 0;
     std::uint64_t frames = 0;
     std::uint64_t missed_deadlines = 0;
+    double effective_rate_hz = 0.0;
+    std::uint64_t interval_samples = 0;
     double mean_interval_ms = 0.0;
     double min_interval_ms = 0.0;
+    double p50_interval_ms = 0.0;
+    double p95_interval_ms = 0.0;
+    double p99_interval_ms = 0.0;
     double max_interval_ms = 0.0;
+    std::uint64_t wake_lateness_samples = 0;
+    double mean_wake_lateness_ms = 0.0;
+    double min_wake_lateness_ms = 0.0;
+    double p50_wake_lateness_ms = 0.0;
+    double p95_wake_lateness_ms = 0.0;
+    double p99_wake_lateness_ms = 0.0;
+    double max_wake_lateness_ms = 0.0;
     std::map<std::uint32_t, DeviceStatistics> devices;
 };
 

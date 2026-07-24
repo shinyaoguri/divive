@@ -127,6 +127,7 @@ void test_metrics() {
     sample.device_index = 3;
     sample.connected = true;
     sample.pose_valid = true;
+    sample.tracking_result = divive::probe::TrackingResult::running_ok;
     sample.matrix.values[0] = 1.0;
 
     divive::probe::PoseFrame first{
@@ -135,36 +136,74 @@ void test_metrics() {
         .devices = {sample},
     };
     metrics.observe(first);
+    metrics.observe_wake_lateness(1'000'000);
 
+    sample.tracking_result =
+        divive::probe::TrackingResult::calibrating_out_of_range;
     divive::probe::PoseFrame second{
         .sequence = 1,
         .elapsed_ns = 10'000'000,
         .devices = {sample},
     };
     metrics.observe(second);
+    metrics.observe_wake_lateness(2'000'000);
 
-    sample.matrix.values[3] = 0.1;
+    sample.tracking_result = divive::probe::TrackingResult::running_ok;
     divive::probe::PoseFrame third{
         .sequence = 2,
         .elapsed_ns = 20'000'000,
         .devices = {sample},
     };
     metrics.observe(third);
+    metrics.observe_wake_lateness(3'000'000);
+
+    sample.position.x = 0.2;
+    sample.matrix.values[3] = 0.2;
+    divive::probe::PoseFrame fourth{
+        .sequence = 3,
+        .elapsed_ns = 30'000'000,
+        .devices = {sample},
+    };
+    metrics.observe(fourth);
+    metrics.observe_wake_lateness(4'000'000);
     metrics.add_missed_deadlines(2);
 
-    const auto summary = metrics.summary(20'000'000);
-    CHECK(name, summary.frames == 3);
+    const auto summary = metrics.summary(30'000'000);
+    CHECK(name, summary.frames == 4);
     CHECK(name, summary.missed_deadlines == 2);
+    CHECK(name, near(summary.effective_rate_hz, 100.0));
+    CHECK(name, summary.interval_samples == 3);
     CHECK(name, near(summary.mean_interval_ms, 10.0));
     CHECK(name, near(summary.min_interval_ms, 10.0));
+    CHECK(name, near(summary.p50_interval_ms, 10.0));
+    CHECK(name, near(summary.p95_interval_ms, 10.0));
+    CHECK(name, near(summary.p99_interval_ms, 10.0));
     CHECK(name, near(summary.max_interval_ms, 10.0));
+    CHECK(name, summary.wake_lateness_samples == 4);
+    CHECK(name, near(summary.mean_wake_lateness_ms, 2.5));
+    CHECK(name, near(summary.min_wake_lateness_ms, 1.0));
+    CHECK(name, near(summary.p50_wake_lateness_ms, 2.0));
+    CHECK(name, near(summary.p95_wake_lateness_ms, 4.0));
+    CHECK(name, near(summary.p99_wake_lateness_ms, 4.0));
+    CHECK(name, near(summary.max_wake_lateness_ms, 4.0));
 
     const auto& device = summary.devices.at(3);
-    CHECK(name, device.samples == 3);
-    CHECK(name, device.connected_samples == 3);
-    CHECK(name, device.valid_pose_samples == 3);
+    CHECK(name, device.samples == 4);
+    CHECK(name, device.connected_samples == 4);
+    CHECK(name, device.valid_pose_samples == 4);
+    CHECK(name, device.running_ok_pose_samples == 3);
+    CHECK(name, device.degraded_valid_pose_samples == 1);
     CHECK(name, device.unique_pose_samples == 2);
-    CHECK(name, device.identical_pose_samples == 1);
+    CHECK(name, device.identical_pose_samples == 2);
+    CHECK(name, device.tracking_result_samples.at(
+                    divive::probe::TrackingResult::running_ok) == 3);
+    CHECK(name, device.tracking_result_samples.at(
+                    divive::probe::TrackingResult::calibrating_out_of_range) == 1);
+    CHECK(name, near(device.max_position_step_m, 0.2));
+    CHECK(name, near(device.max_derived_speed_mps, 20.0));
+    CHECK(name, near(device.max_speed_mismatch_mps, 20.0));
+    CHECK(name, device.kinematic_discontinuity_samples == 1);
+    CHECK(name, device.kinematic_discontinuity_running_ok_samples == 1);
 }
 
 void test_json() {
@@ -177,6 +216,38 @@ void test_json() {
                          "\"type\":\"error\",\"elapsed_ns\":42,"
                          "\"code\":\"openvr_init\","
                          "\"message\":\"runtime \\\"not ready\\\"\"}");
+
+    const auto start = divive::probe::serialize_probe_start(
+        "2026-07-24T00:00:00Z", "2.15.6", "C:\\SteamVR",
+        divive::probe::Options{},
+        divive::probe::SchedulerInfo{
+            .backend = "windows_high_resolution_waitable_timer",
+            .high_resolution = true,
+        });
+    CHECK(name, start.find("\"scheduler\":{"
+                           "\"backend\":\"windows_high_resolution_waitable_timer\","
+                           "\"high_resolution\":true}") != std::string::npos);
+
+    divive::probe::ProbeMetrics metrics;
+    divive::probe::PoseSample sample;
+    sample.device_index = 1;
+    sample.connected = true;
+    sample.pose_valid = true;
+    sample.tracking_result = divive::probe::TrackingResult::running_ok;
+    metrics.observe(divive::probe::PoseFrame{
+        .sequence = 0,
+        .elapsed_ns = 1,
+        .devices = {sample},
+    });
+    const auto summary = divive::probe::serialize_summary(metrics.summary(1));
+    CHECK(name, summary.find("\"effective_rate_hz\":0") != std::string::npos);
+    CHECK(name, summary.find("\"tracking_result_samples\":{\"running_ok\":1}") !=
+                    std::string::npos);
+    CHECK(name, summary.find("\"diagnostic_thresholds\":{") != std::string::npos);
+    CHECK(name, summary.find("\"position_step_m\":0.10000000000000001") !=
+                    std::string::npos);
+    CHECK(name, summary.find("\"derived_speed_mps\":10") != std::string::npos);
+    CHECK(name, summary.find("\"speed_mismatch_mps\":5") != std::string::npos);
 }
 
 } // namespace
