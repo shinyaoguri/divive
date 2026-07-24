@@ -36,4 +36,6 @@ New-Item -ItemType Directory -Force "$run\screenshots"
   --output "$run\raw\openvr-all-devices.jsonl"
 ```
 
-結果を確認してから、Trackerだけの30分試験へ進みます。
+結果を確認してから[H0.5 timing / pose quality](../bridge/probes/openvr/README.md#h05-timing--pose-quality)
+を実行します。H0.5のrateとpose連続性をレビューし、明示的にH1 GOとなってから
+Trackerだけの30分試験へ進みます。

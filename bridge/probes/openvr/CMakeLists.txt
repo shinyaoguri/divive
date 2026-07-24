@@ -28,6 +28,8 @@ add_executable(
     main.cpp
     openvr_session.cpp
     openvr_session.hpp
+    periodic_waiter.cpp
+    periodic_waiter.hpp
 )
 
 set_target_properties(

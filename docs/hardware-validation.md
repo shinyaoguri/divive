@@ -84,6 +84,17 @@ Pass:
 
 - 各physical deviceをserialまたは同等のstable IDへ対応付けられる
 
+2026-07-24のTracker 3.0実機結果:
+
+- stock SteamVR 2.16.7はHMD未接続時に`Hmd Not Found (108)`で失敗
+- `steamvr.requireHmd = false`だけを追加すると、Null Driverと非公式patchなしで成功
+- Tracker 3.0を`GenericTracker`、Base Station 2.0×2を
+  `TrackingReference`として列挙
+- 結果は[Issue #12](https://github.com/shinyaoguri/divive/issues/12)へ記録
+
+この結果によりH0はTracker 3.0について条件付きPASSとします。設定の再現性、長時間pose、
+rate、identity復帰はH0.5/H1/H4/H5で判定します。
+
 ### H1: Tracker 3.0 without HMD
 
 **Question:** ヘッドセットなしでSteamVRを起動し、TrackerをOpenVRから取得できるか。
@@ -97,10 +108,20 @@ Measure:
 - valid pose
 - serial、velocity、battery
 
+Preflight:
+
+- [OpenVR probeのH0.5](../bridge/probes/openvr/README.md#h05-timing--pose-quality)
+  を実行する
+- 120Hz要求で実効110Hz以上を確認する
+- 固定試験でkinematic discontinuityがないことを確認する
+- `pose_valid`とtracking resultを別々に評価する
+
 Pass:
 
 - 再起動を含む3回の試行で同じ手順が再現する
 - 30分以上valid poseを継続取得する
+- `running_ok_pose_samples`とdegraded stateの時間を報告できる
+- 固定区間で`kinematic_discontinuity_running_ok_samples`が0
 
 推奨command:
 
@@ -153,15 +174,15 @@ Tracker familyごとに次を`available / unavailable / unstable`で分類しま
 
 | Field | Tracker 3.0 | Ultimate |
 | --- | --- | --- |
-| Serial | TBD | TBD |
-| Position | TBD | TBD |
-| Orientation | TBD | TBD |
-| Linear velocity | TBD | TBD |
-| Angular velocity | TBD | TBD |
-| Tracking result/reason | TBD | TBD |
-| Connected | TBD | TBD |
-| Battery | TBD | TBD |
-| Charging | TBD | TBD |
+| Serial | Available（H0 1台） | TBD |
+| Position | Available（H0 1台） | TBD |
+| Orientation | Available（H0 1台） | TBD |
+| Linear velocity | Available（H0 1台） | TBD |
+| Angular velocity | Available（H0 1台） | TBD |
+| Tracking result/reason | Available（H0 1台） | TBD |
+| Connected | Available（H0 1台） | TBD |
+| Battery | Available（H0 1台） | TBD |
+| Charging | Available（H0 1台） | TBD |
 | Runtime role | TBD | TBD |
 
 ### H4: Rate and prediction
@@ -172,6 +193,8 @@ Tracker familyごとに次を`available / unavailable / unstable`で分類しま
 - consecutive identical values
 - timestampの可用性
 - inter-sample interval
+- scheduler wake lateness
+- kinematic discontinuity
 - CPU
 - runtimeがpredictionしたposeか
 

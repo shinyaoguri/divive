@@ -15,7 +15,8 @@ std::string json_escape(std::string_view value);
 std::string serialize_probe_start(std::string_view wall_time_utc,
                                   std::string_view sdk_version,
                                   std::string_view runtime_path,
-                                  const Options& options);
+                                  const Options& options,
+                                  const SchedulerInfo& scheduler);
 
 std::string serialize_inventory(std::uint64_t elapsed_ns,
                                 const std::vector<DeviceInventory>& devices);

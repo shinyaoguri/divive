@@ -3,7 +3,7 @@
 VIVE Trackerの6DoF姿勢を、ヘッドセットなしのWindows取得機からMacへ低遅延で配信し、Unity、Unreal Engine、p5.js、独自コンテンツから共通APIで利用するためのトラッキング基盤です。
 
 > [!IMPORTANT]
-> 現在は設計・実機検証フェーズです。Tracker 3.0とVIVE Ultimate Trackerのヘッドセットなし運用をGate 0で検証するまで、取得backendの成立性を確定事項として扱いません。
+> 現在は設計・実機検証フェーズです。Tracker 3.0は`requireHmd: false`を条件にH0を通過しましたが、H1の長時間・再起動試験は未完了です。VIVE Ultimate Trackerを含むGate 0が完了するまで、取得backendの成立性を確定事項として扱いません。
 
 ## 目標
 

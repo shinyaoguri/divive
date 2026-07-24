@@ -15,7 +15,9 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] A1 OpenVR probeのsource、JSONL、共通unit test
 - [x] macOSでOpenVR非依存coreをbuild/test
 - [x] Windows x64 build用CIとartifact作成
-- [ ] Windows実機でH0/H1を実行
+- [x] Tracker 3.0をWindows実機でH0列挙・60秒pose取得
+- [ ] 改良ProbeでH0.5 timing / pose qualityを実行
+- [ ] Windows実機でH1の30分×3回を実行
 - [ ] Ultimate実機でH2を実行
 - [ ] 実機結果に基づくA3 backend decision
 - [x] B0 canonical pose modelをFlatBuffers schemaとして固定

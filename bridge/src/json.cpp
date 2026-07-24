@@ -1,5 +1,7 @@
 #include "divive/probe/json.hpp"
 
+#include "divive/probe/metrics.hpp"
+
 #include <cmath>
 #include <iomanip>
 #include <locale>
@@ -191,7 +193,8 @@ std::string json_escape(const std::string_view value) {
 std::string serialize_probe_start(const std::string_view wall_time_utc,
                                   const std::string_view sdk_version,
                                   const std::string_view runtime_path,
-                                  const Options& options) {
+                                  const Options& options,
+                                  const SchedulerInfo& scheduler) {
     auto output = json_stream();
     output << "{\"schema\":\"divive.openvr_probe/1\","
               "\"type\":\"probe_start\",\"wall_time_utc\":";
@@ -213,6 +216,10 @@ std::string serialize_probe_start(const std::string_view wall_time_utc,
     append_string(output, to_string(options.origin));
     output << ",\"trackers_only\":";
     append_bool(output, options.trackers_only);
+    output << "},\"scheduler\":{\"backend\":";
+    append_string(output, scheduler.backend);
+    output << ",\"high_resolution\":";
+    append_bool(output, scheduler.high_resolution);
     output << "}}";
     return output.str();
 }
@@ -255,13 +262,41 @@ std::string serialize_summary(const ProbeSummary& summary) {
               "\"type\":\"probe_summary\",\"elapsed_ns\":"
            << summary.elapsed_ns << ",\"frames\":" << summary.frames
            << ",\"missed_deadlines\":" << summary.missed_deadlines
-           << ",\"interval_ms\":{";
-    output << "\"mean\":";
+           << ",\"effective_rate_hz\":";
+    append_number(output, summary.effective_rate_hz);
+    output << ",\"interval_ms\":{\"samples\":" << summary.interval_samples
+           << ",\"mean\":";
     append_number(output, summary.mean_interval_ms);
     output << ",\"min\":";
     append_number(output, summary.min_interval_ms);
+    output << ",\"p50\":";
+    append_number(output, summary.p50_interval_ms);
+    output << ",\"p95\":";
+    append_number(output, summary.p95_interval_ms);
+    output << ",\"p99\":";
+    append_number(output, summary.p99_interval_ms);
     output << ",\"max\":";
     append_number(output, summary.max_interval_ms);
+    output << "},\"wake_lateness_ms\":{\"samples\":"
+           << summary.wake_lateness_samples << ",\"mean\":";
+    append_number(output, summary.mean_wake_lateness_ms);
+    output << ",\"min\":";
+    append_number(output, summary.min_wake_lateness_ms);
+    output << ",\"p50\":";
+    append_number(output, summary.p50_wake_lateness_ms);
+    output << ",\"p95\":";
+    append_number(output, summary.p95_wake_lateness_ms);
+    output << ",\"p99\":";
+    append_number(output, summary.p99_wake_lateness_ms);
+    output << ",\"max\":";
+    append_number(output, summary.max_wake_lateness_ms);
+    output << "},\"diagnostic_thresholds\":{"
+              "\"position_step_m\":";
+    append_number(output, ProbeMetrics::kDiscontinuityMinimumStepM);
+    output << ",\"derived_speed_mps\":";
+    append_number(output, ProbeMetrics::kDiscontinuityMinimumDerivedSpeedMps);
+    output << ",\"speed_mismatch_mps\":";
+    append_number(output, ProbeMetrics::kDiscontinuityMinimumSpeedMismatchMps);
     output << "},\"devices\":[";
 
     std::size_t index = 0;
@@ -273,9 +308,34 @@ std::string serialize_summary(const ProbeSummary& summary) {
                << ",\"samples\":" << statistics.samples
                << ",\"connected_samples\":" << statistics.connected_samples
                << ",\"valid_pose_samples\":" << statistics.valid_pose_samples
+               << ",\"running_ok_pose_samples\":"
+               << statistics.running_ok_pose_samples
+               << ",\"degraded_valid_pose_samples\":"
+               << statistics.degraded_valid_pose_samples
                << ",\"unique_pose_samples\":" << statistics.unique_pose_samples
                << ",\"identical_pose_samples\":" << statistics.identical_pose_samples
-               << '}';
+               << ",\"tracking_result_samples\":{";
+
+        std::size_t tracking_result_index = 0;
+        for (const auto& [tracking_result, samples] :
+             statistics.tracking_result_samples) {
+            if (tracking_result_index++ > 0) {
+                output << ',';
+            }
+            append_string(output, to_string(tracking_result));
+            output << ':' << samples;
+        }
+
+        output << "},\"max_position_step_m\":";
+        append_number(output, statistics.max_position_step_m);
+        output << ",\"max_derived_speed_mps\":";
+        append_number(output, statistics.max_derived_speed_mps);
+        output << ",\"max_speed_mismatch_mps\":";
+        append_number(output, statistics.max_speed_mismatch_mps);
+        output << ",\"kinematic_discontinuity_samples\":"
+               << statistics.kinematic_discontinuity_samples
+               << ",\"kinematic_discontinuity_running_ok_samples\":"
+               << statistics.kinematic_discontinuity_running_ok_samples << '}';
     }
     output << "]}";
     return output.str();

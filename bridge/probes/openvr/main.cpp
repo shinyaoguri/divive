@@ -1,4 +1,5 @@
 #include "openvr_session.hpp"
+#include "periodic_waiter.hpp"
 
 #include "divive/probe/json.hpp"
 #include "divive/probe/metrics.hpp"
@@ -17,7 +18,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 namespace {
@@ -101,9 +101,22 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    std::string scheduler_error;
+    auto scheduler = divive::probe::PeriodicWaiter::create(scheduler_error);
+    if (!scheduler) {
+        write_line(*output,
+                   divive::probe::serialize_error(
+                       "scheduler_init_failed", scheduler_error,
+                       elapsed_ns(start, Clock::now())));
+        output->flush();
+        std::cerr << "scheduler初期化失敗: " << scheduler_error << '\n';
+        return 75;
+    }
+
     if (!write_line(*output, divive::probe::serialize_probe_start(
                                  wall_time_utc(), session->sdk_version(),
-                                 session->runtime_path(), options))) {
+                                 session->runtime_path(), options,
+                                 scheduler->info()))) {
         std::cerr << "probe_startを書き込めません\n";
         return 74;
     }
@@ -139,9 +152,24 @@ int main(int argc, char** argv) {
         }
 
         if (now < next_tick) {
-            std::this_thread::sleep_until(next_tick);
+            if (!scheduler->wait_until(next_tick, scheduler_error)) {
+                write_line(*output,
+                           divive::probe::serialize_error(
+                               "scheduler_wait_failed", scheduler_error,
+                               elapsed_ns(start, Clock::now())));
+                output->flush();
+                std::cerr << "scheduler待機失敗: " << scheduler_error << '\n';
+                return 75;
+            }
         }
         now = Clock::now();
+        const auto wake_lateness =
+            now > next_tick
+                ? std::chrono::duration_cast<std::chrono::nanoseconds>(now -
+                                                                       next_tick)
+                : std::chrono::nanoseconds{0};
+        metrics.observe_wake_lateness(
+            static_cast<std::uint64_t>(wake_lateness.count()));
 
         if (now >= next_inventory) {
             const auto inventory = session->inventory(options.trackers_only);
