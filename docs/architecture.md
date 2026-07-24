@@ -186,6 +186,11 @@ Headless Simulatorはwire encodeやUDP loopbackを挟まず、この境界から
 `HubStateStore`へ入力します。network faultの試験は別途UDP経路で行い、
 Simulator自体のmotion/fault再現性とtransport検証を混同しません。
 
+Mac GUIは`NetworkRuntime`と`SimulatorRuntime`を排他的に切り替えます。どちらも
+MainActorへframe callbackを送らず、個別の`HubStateStore`へ入力します。GUIは選択中の
+storeから10Hzでlatest snapshotだけを取得し、source切替時に古いsourceを停止してから
+新しいsourceを開始します。
+
 ## 状態遷移
 
 Trackerの状態は少なくとも次を区別します。

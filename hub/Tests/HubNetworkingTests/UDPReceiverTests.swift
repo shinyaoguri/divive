@@ -21,6 +21,7 @@ final class UDPReceiverTests: XCTestCase {
         received.fulfill()
       }
     )
+    XCTAssertTrue(receiver.isActive())
 
     let senderGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let sender = try DatagramBootstrap(group: senderGroup)
@@ -36,6 +37,7 @@ final class UDPReceiverTests: XCTestCase {
     try sender.close().wait()
     try senderGroup.syncShutdownGracefully()
     try receiver.shutdown()
+    XCTAssertFalse(receiver.isActive())
 
     let statistics = receiver.statistics()
     XCTAssertEqual(statistics.datagrams, 1)

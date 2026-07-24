@@ -11,7 +11,7 @@ public struct HubAppView: View {
 
   public var body: some View {
     NavigationSplitView {
-      SimulatorControlView(model: model)
+      SourceControlView(model: model)
         .navigationSplitViewColumnWidth(
           min: 270,
           ideal: 300,
@@ -27,7 +27,7 @@ public struct HubAppView: View {
   }
 }
 
-private struct SimulatorControlView: View {
+private struct SourceControlView: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
@@ -37,63 +37,94 @@ private struct SimulatorControlView: View {
           Circle()
             .fill(model.isRunning ? Color.green : Color.secondary)
             .frame(width: 10, height: 10)
-          Text(model.isRunning ? "Simulator実行中" : "Simulator停止中")
+          Text(model.statusTitle)
             .font(.headline)
         }
+        if model.activeSource == .network,
+          let endpoint = model.boundEndpoint
+        {
+          Text(endpoint)
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+        }
       }
 
-      Section("シーン") {
-        Stepper(
-          "Tracker: \(model.trackerCount)台",
-          value: $model.trackerCount,
-          in: 1...16
-        )
-
-        Picker("Motion", selection: $model.motion) {
-          ForEach(HubAppMotionPreset.allCases) { motion in
-            Text(motion.displayName).tag(motion)
+      Section("入力Source") {
+        Picker("入力Source", selection: $model.selectedSource) {
+          ForEach(HubInputSource.allCases) { source in
+            Text(source.displayName).tag(source)
           }
         }
-
-        Picker("更新頻度", selection: $model.rate) {
-          ForEach(SimulatorRate.allCases, id: \.rawValue) { rate in
-            Text("\(rate.rawValue) Hz").tag(rate)
-          }
-        }
+        .labelsHidden()
         .pickerStyle(.segmented)
-
-        TextField("Seed", text: $model.seedText)
-          .textFieldStyle(.roundedBorder)
       }
 
-      Section("障害注入") {
-        LabeledContent(
-          "Frame loss",
-          value: model.frameLossPercent,
-          format: .number.precision(.fractionLength(1)),
-          suffix: "%"
-        )
-        Slider(value: $model.frameLossPercent, in: 0...50, step: 0.5)
+      if model.selectedSource == .simulator {
+        Section("シーン") {
+          Stepper(
+            "Tracker: \(model.trackerCount)台",
+            value: $model.trackerCount,
+            in: 1...16
+          )
 
-        LabeledContent(
-          "Tracking lost",
-          value: model.trackingLostPercent,
-          format: .number.precision(.fractionLength(1)),
-          suffix: "%"
-        )
-        Slider(
-          value: $model.trackingLostPercent,
-          in: 0...50,
-          step: 0.5
-        )
+          Picker("Motion", selection: $model.motion) {
+            ForEach(HubAppMotionPreset.allCases) { motion in
+              Text(motion.displayName).tag(motion)
+            }
+          }
+
+          Picker("更新頻度", selection: $model.rate) {
+            ForEach(SimulatorRate.allCases, id: \.rawValue) { rate in
+              Text("\(rate.rawValue) Hz").tag(rate)
+            }
+          }
+          .pickerStyle(.segmented)
+
+          TextField("Seed", text: $model.seedText)
+            .textFieldStyle(.roundedBorder)
+        }
+
+        Section("障害注入") {
+          LabeledContent(
+            "Frame loss",
+            value: model.frameLossPercent,
+            format: .number.precision(.fractionLength(1)),
+            suffix: "%"
+          )
+          Slider(value: $model.frameLossPercent, in: 0...50, step: 0.5)
+
+          LabeledContent(
+            "Tracking lost",
+            value: model.trackingLostPercent,
+            format: .number.precision(.fractionLength(1)),
+            suffix: "%"
+          )
+          Slider(
+            value: $model.trackingLostPercent,
+            in: 0...50,
+            step: 0.5
+          )
+        }
+      } else {
+        Section("UDP Listener") {
+          TextField("Bind address", text: $model.networkBindHost)
+            .textFieldStyle(.roundedBorder)
+          TextField("UDP port", text: $model.networkPortText)
+            .textFieldStyle(.roundedBorder)
+          Text(
+            "`127.0.0.1`はMac内の試験用、`0.0.0.0`はLAN上のBridgeを受信します。"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        }
       }
 
       Section {
         Button {
-          Task { await model.startSimulator() }
+          Task { await model.startSelectedSource() }
         } label: {
           Label(
-            model.isRunning ? "設定を反映して再起動" : "開始",
+            model.startButtonTitle,
             systemImage: model.isRunning ? "arrow.clockwise" : "play.fill"
           )
           .frame(maxWidth: .infinity)
@@ -101,7 +132,7 @@ private struct SimulatorControlView: View {
         .buttonStyle(.borderedProminent)
 
         Button(role: .destructive) {
-          Task { await model.stopSimulator() }
+          Task { await model.stopActiveSource() }
         } label: {
           Label("停止", systemImage: "stop.fill")
             .frame(maxWidth: .infinity)
@@ -118,9 +149,7 @@ private struct SimulatorControlView: View {
       }
 
       Section {
-        Text(
-          "このGUIは現在Simulator専用です。Windows Bridgeの受信切替は次の段階で追加します。"
-        )
+        Text("Source切替時は現在のSourceを停止し、選択した設定で再開します。")
         .font(.caption)
         .foregroundStyle(.secondary)
       }
@@ -137,41 +166,100 @@ private struct HubDashboardView: View {
     GridItem(.adaptive(minimum: 150), spacing: 12)
   ]
 
+  private var metricItems: [MetricItem] {
+    var items = [
+      MetricItem(
+        title: "Hub更新レート",
+        value: String(format: "%.1f Hz", model.observedRateHz),
+        systemImage: "waveform.path.ecg"
+      ),
+      MetricItem(
+        title: "Tracker",
+        value: "\(model.trackers.count) 台",
+        systemImage: "dot.radiowaves.left.and.right"
+      ),
+    ]
+    switch model.displayedSource {
+    case .simulator:
+      items.append(
+        MetricItem(
+          title: "Frame loss",
+          value: String(format: "%.1f%%", model.droppedPercent),
+          systemImage: "arrow.down.right.and.arrow.up.left"
+        )
+      )
+      items.append(
+        MetricItem(
+          title: "Deadline miss",
+          value: "\(model.missedDeadlines)",
+          systemImage: "clock.badge.exclamationmark"
+        )
+      )
+    case .network:
+      items.append(
+        MetricItem(
+          title: "UDP datagram",
+          value: "\(model.receivedDatagrams)",
+          systemImage: "network"
+        )
+      )
+      items.append(
+        MetricItem(
+          title: "欠落Frame",
+          value: "\(model.missingFrames)",
+          systemImage: "arrow.down.right.and.arrow.up.left"
+        )
+      )
+      items.append(
+        MetricItem(
+          title: "順序逆転",
+          value: "\(model.outOfOrderPackets)",
+          systemImage: "arrow.up.arrow.down"
+        )
+      )
+      items.append(
+        MetricItem(
+          title: "受信異常",
+          value: "\(model.networkAnomalyCount)",
+          systemImage: "exclamationmark.triangle"
+        )
+      )
+      items.append(
+        MetricItem(
+          title: "受信処理",
+          value: "\(model.lastProcessingMicroseconds) µs",
+          systemImage: "timer"
+        )
+      )
+    }
+    return items
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 18) {
         VStack(alignment: .leading, spacing: 4) {
           Text("Tracker Monitor")
             .font(.largeTitle.bold())
-          Text("SimulatorからHubへ入った正規化済みlatest state")
+          Text(model.dashboardSubtitle)
             .foregroundStyle(.secondary)
         }
 
         LazyVGrid(columns: columns, spacing: 12) {
-          MetricCard(
-            title: "出力レート",
-            value: String(format: "%.1f Hz", model.observedRateHz),
-            systemImage: "waveform.path.ecg"
-          )
-          MetricCard(
-            title: "Tracker",
-            value: "\(model.trackers.count) 台",
-            systemImage: "dot.radiowaves.left.and.right"
-          )
-          MetricCard(
-            title: "Frame loss",
-            value: String(format: "%.1f%%", model.droppedPercent),
-            systemImage: "arrow.down.right.and.arrow.up.left"
-          )
-          MetricCard(
-            title: "Deadline miss",
-            value: "\(model.missedDeadlines)",
-            systemImage: "clock.badge.exclamationmark"
-          )
+          ForEach(metricItems) { item in
+            MetricCard(
+              title: item.title,
+              value: item.value,
+              systemImage: item.systemImage
+            )
+          }
         }
 
         GroupBox("空間プレビュー — 上面図 X / -Z（±2m）") {
-          TrackerTopDownView(trackers: model.trackers)
+          TrackerTopDownView(
+            trackers: model.trackers,
+            source: model.displayedSource
+          )
             .frame(minHeight: 300)
         }
 
@@ -180,9 +268,7 @@ private struct HubDashboardView: View {
             Text("Tracker一覧")
               .font(.title2.bold())
             Spacer()
-            Text(
-              "attempted \(model.attemptedFrames) / emitted \(model.emittedFrames)"
-            )
+            Text(model.summaryText)
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
           }
@@ -194,6 +280,14 @@ private struct HubDashboardView: View {
     }
     .background(Color(nsColor: .windowBackgroundColor))
   }
+}
+
+private struct MetricItem: Identifiable {
+  let title: String
+  let value: String
+  let systemImage: String
+
+  var id: String { title }
 }
 
 private struct MetricCard: View {
@@ -276,6 +370,7 @@ private struct TrackerTable: View {
 
 private struct TrackerTopDownView: View {
   let trackers: [TrackerDisplayState]
+  let source: HubInputSource
   private let visibleHalfRange = 2.0
 
   var body: some View {
@@ -294,7 +389,11 @@ private struct TrackerTopDownView: View {
         ContentUnavailableView(
           "Trackerがありません",
           systemImage: "dot.radiowaves.left.and.right",
-          description: Text("左側の「開始」でSimulatorを起動してください。")
+          description: Text(
+            source == .simulator
+              ? "左側の「開始」でSimulatorを起動してください。"
+              : "UDP受信を開始し、Bridgeまたはtest senderを起動してください。"
+          )
         )
       }
     }

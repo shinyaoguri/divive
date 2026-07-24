@@ -120,7 +120,6 @@ Quaternion、不正なcircle値は拒否します。
 - fault scriptの保存・読み込み
 - WebSocket、Unityなど外部contentへの配信
 
-SwiftUIの開発用GUIは[GUI.md](GUI.md)でHeadless APIへ接続しています。現在の
-空間表示は上面図であり、3D表示と個別Tracker編集は後続範囲です。次段階では
-Network receiverとのsource切替を追加し、その後の障害注入を同じ固定seed modelへ
-追加します。
+SwiftUIの開発用GUIは[GUI.md](GUI.md)でHeadless APIへ接続し、UDP Network sourceと
+切り替えられます。現在の空間表示は上面図であり、3D表示と個別Tracker編集は後続範囲
+です。次段階では障害注入を同じ固定seed modelへ追加します。

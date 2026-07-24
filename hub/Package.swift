@@ -52,7 +52,12 @@ let package = Package(
     ),
     .target(
       name: "HubAppUI",
-      dependencies: ["HubCore", "HubProtocol", "HubSimulator"]
+      dependencies: [
+        "HubCore",
+        "HubNetworking",
+        "HubProtocol",
+        "HubSimulator",
+      ]
     ),
     .executableTarget(
       name: "DiviveReceiver",
@@ -90,7 +95,15 @@ let package = Package(
     ),
     .testTarget(
       name: "HubAppUITests",
-      dependencies: ["HubAppUI", "HubCore", "HubProtocol", "HubSimulator"]
+      dependencies: [
+        "HubAppUI",
+        "HubCore",
+        "HubNetworking",
+        "HubProtocol",
+        "HubSimulator",
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+      ]
     ),
   ]
 )
