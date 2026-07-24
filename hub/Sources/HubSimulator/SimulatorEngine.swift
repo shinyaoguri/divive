@@ -16,6 +16,22 @@ public enum SimulatorMotionPreset: Equatable, Sendable {
     angularSpeedRadiansPerSecond: Float,
     phaseRadians: Float
   )
+  case walk(
+    strideLengthMeters: Float,
+    stepHeightMeters: Float,
+    cadenceHz: Float,
+    phaseRadians: Float
+  )
+  case jump(
+    heightMeters: Float,
+    frequencyHz: Float,
+    phaseRadians: Float
+  )
+  case random(
+    maximumOffsetMeters: Vector3,
+    frequencyHz: Float,
+    seed: UInt64
+  )
 }
 
 public struct SimulatorTrackerConfiguration: Equatable, Sendable {
@@ -121,6 +137,9 @@ public enum SimulatorConfigurationError: Error, Equatable, Sendable {
   case nonFinitePose(String)
   case nonNormalizedOrientation(String)
   case invalidCircle(String)
+  case invalidWalk(String)
+  case invalidJump(String)
+  case invalidRandom(String)
   case sequenceExhausted
 }
 
@@ -331,7 +350,108 @@ public struct SimulatorEngine: Sendable {
           z: -radius * angularSpeed * Float(cosine)
         )
       )
+    case .walk(let strideLength, let stepHeight, let cadence, let phase):
+      let angularSpeed = 2 * Double.pi * Double(cadence)
+      let angle = Double(phase) + angularSpeed * simulationTime
+      let sine = sin(angle)
+      let cosine = cos(angle)
+      let liftSine = max(0, sine)
+      let halfStride = Double(strideLength) / 2
+
+      return (
+        Vector3(
+          x: configuration.position.x,
+          y: configuration.position.y
+            + stepHeight * Float(liftSine * liftSine),
+          z: configuration.position.z - Float(halfStride * cosine)
+        ),
+        Vector3(
+          x: 0,
+          y: liftSine > 0
+            ? stepHeight * Float(angularSpeed * sin(2 * angle))
+            : 0,
+          z: Float(halfStride * angularSpeed * sine)
+        )
+      )
+    case .jump(let height, let frequency, let phase):
+      let angularSpeed = 2 * Double.pi * Double(frequency)
+      let angle = Double(phase) + angularSpeed * simulationTime
+      let verticalOffset = Double(height) * (1 - cos(angle)) / 2
+      let verticalVelocity =
+        Double(height) * angularSpeed * sin(angle) / 2
+
+      return (
+        Vector3(
+          x: configuration.position.x,
+          y: configuration.position.y + Float(verticalOffset),
+          z: configuration.position.z
+        ),
+        Vector3(x: 0, y: Float(verticalVelocity), z: 0)
+      )
+    case .random(let maximumOffset, let frequency, let seed):
+      let x = randomAxisMotion(
+        maximumOffset: maximumOffset.x,
+        frequencyHz: frequency,
+        seed: seed,
+        axis: 0,
+        simulationTime: simulationTime
+      )
+      let y = randomAxisMotion(
+        maximumOffset: maximumOffset.y,
+        frequencyHz: frequency,
+        seed: seed,
+        axis: 1,
+        simulationTime: simulationTime
+      )
+      let z = randomAxisMotion(
+        maximumOffset: maximumOffset.z,
+        frequencyHz: frequency,
+        seed: seed,
+        axis: 2,
+        simulationTime: simulationTime
+      )
+      return (
+        Vector3(
+          x: configuration.position.x + x.offset,
+          y: configuration.position.y + y.offset,
+          z: configuration.position.z + z.offset
+        ),
+        Vector3(x: x.velocity, y: y.velocity, z: z.velocity)
+      )
     }
+  }
+
+  /// seedから2つの正弦波を生成し、wall clockやfault用乱数列に依存しない
+  /// 滑らかな疑似random軌道を返す。
+  private func randomAxisMotion(
+    maximumOffset: Float,
+    frequencyHz: Float,
+    seed: UInt64,
+    axis: UInt64,
+    simulationTime: Double
+  ) -> (offset: Float, velocity: Float) {
+    var random = SplitMix64(
+      seed: seed &+ axis &* 0x9e37_79b9_7f4a_7c15
+    )
+    let primaryPhase = 2 * Double.pi * random.nextUnitInterval()
+    let secondaryPhase = 2 * Double.pi * random.nextUnitInterval()
+    let secondaryRatio = 1.3 + 0.4 * random.nextUnitInterval()
+    let primaryAngularSpeed = 2 * Double.pi * Double(frequencyHz)
+    let secondaryAngularSpeed = primaryAngularSpeed * secondaryRatio
+    let primaryAngle =
+      primaryPhase + primaryAngularSpeed * simulationTime
+    let secondaryAngle =
+      secondaryPhase + secondaryAngularSpeed * simulationTime
+    let maximum = Double(maximumOffset)
+
+    let offset =
+      maximum
+      * (0.65 * sin(primaryAngle) + 0.35 * sin(secondaryAngle))
+    let velocity =
+      maximum
+      * (0.65 * primaryAngularSpeed * cos(primaryAngle)
+        + 0.35 * secondaryAngularSpeed * cos(secondaryAngle))
+    return (Float(offset), Float(velocity))
   }
 
   private func validate(
@@ -352,15 +472,52 @@ public struct SimulatorEngine: Sendable {
         configuration.trackerID
       )
     }
-    if case .circle(let radius, let angularSpeed, let phase) =
-      configuration.motion
-    {
+    switch configuration.motion {
+    case .stationary:
+      break
+    case .circle(let radius, let angularSpeed, let phase):
       guard radius.isFinite,
         radius >= 0,
         angularSpeed.isFinite,
         phase.isFinite
       else {
         throw SimulatorConfigurationError.invalidCircle(
+          configuration.trackerID
+        )
+      }
+    case .walk(let strideLength, let stepHeight, let cadence, let phase):
+      guard strideLength.isFinite,
+        strideLength >= 0,
+        stepHeight.isFinite,
+        stepHeight >= 0,
+        cadence.isFinite,
+        cadence > 0,
+        phase.isFinite
+      else {
+        throw SimulatorConfigurationError.invalidWalk(
+          configuration.trackerID
+        )
+      }
+    case .jump(let height, let frequency, let phase):
+      guard height.isFinite,
+        height >= 0,
+        frequency.isFinite,
+        frequency > 0,
+        phase.isFinite
+      else {
+        throw SimulatorConfigurationError.invalidJump(
+          configuration.trackerID
+        )
+      }
+    case .random(let maximumOffset, let frequency, _):
+      guard maximumOffset.isFinite,
+        maximumOffset.x >= 0,
+        maximumOffset.y >= 0,
+        maximumOffset.z >= 0,
+        frequency.isFinite,
+        frequency > 0
+      else {
+        throw SimulatorConfigurationError.invalidRandom(
           configuration.trackerID
         )
       }

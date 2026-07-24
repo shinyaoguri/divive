@@ -1,11 +1,23 @@
-@testable import HubAppUI
 import Combine
 import HubCore
 import HubProtocol
 import HubSimulator
 import XCTest
 
+@testable import HubAppUI
+
 final class HubAppConfigurationTests: XCTestCase {
+  func testGUIで全motionPresetを選択できる() {
+    XCTAssertEqual(
+      HubAppMotionPreset.allCases,
+      [.stationary, .circle, .walk, .jump, .random]
+    )
+    XCTAssertEqual(
+      HubAppMotionPreset.allCases.map(\.displayName),
+      ["静止", "円運動", "歩行", "ジャンプ", "ランダム移動"]
+    )
+  }
+
   @MainActor
   func testSource未開始のrefreshはUI更新をpublishしない() async {
     let model = HubAppModel()
@@ -49,7 +61,7 @@ final class HubAppConfigurationTests: XCTestCase {
     let configuration = configuration(
       trackerCount: 3,
       rate: .hz90,
-      motion: .stationary,
+      motion: .random,
       seed: 42
     )
     var first = try configuration.makeSimulator()
@@ -60,6 +72,26 @@ final class HubAppConfigurationTests: XCTestCase {
       try first.step(receivedMonotonicNS: 10),
       try second.step(receivedMonotonicNS: 10)
     )
+  }
+
+  func testGUIの歩行は左右footへ逆位相を設定する() throws {
+    var simulator = try configuration(
+      trackerCount: 3,
+      rate: .hz120,
+      motion: .walk
+    ).makeSimulator()
+
+    let frame = try emitted(
+      simulator.step(receivedMonotonicNS: 0)
+    )
+    let leftFoot = try XCTUnwrap(
+      frame.poseBatch.trackers.first { $0.role == "left_foot" }
+    )
+    let rightFoot = try XCTUnwrap(
+      frame.poseBatch.trackers.first { $0.role == "right_foot" }
+    )
+    XCTAssertLessThan(leftFoot.position.z, -1)
+    XCTAssertGreaterThan(rightFoot.position.z, -1)
   }
 
   func testGUIのTracker上限を検証する() {

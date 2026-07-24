@@ -21,7 +21,7 @@ swift run divive-hub-app
 ## Simulator
 
 - Tracker数: 1〜16台
-- motion: 静止、円運動
+- motion: 静止、円運動、歩行、ジャンプ、ランダム移動
 - 更新頻度: 30 / 60 / 90 / 120Hz
 - 再現用seed
 - frame loss: 0〜50%
