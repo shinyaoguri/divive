@@ -1,8 +1,9 @@
-@testable import HubAppUI
 import Foundation
 import NIOCore
 import NIOPosix
 import XCTest
+
+@testable import HubAppUI
 
 final class NetworkRuntimeTests: XCTestCase {
   func testLoopback受信をGUI用latestSnapshotへ反映する() async throws {
@@ -26,7 +27,10 @@ final class NetworkRuntimeTests: XCTestCase {
     XCTAssertEqual(received.metrics.receiver.validPackets, 1)
     XCTAssertEqual(received.metrics.receiver.invalidPackets, 0)
     XCTAssertEqual(received.hubState.trackers.count, 2)
-    XCTAssertNotNil(received.metrics.lastRemoteAddress)
+    XCTAssertTrue(
+      try XCTUnwrap(received.metrics.lastRemoteAddress)
+        .contains("127.0.0.1")
+    )
 
     try await runtime.stop()
     let stopped = await runtime.snapshot()

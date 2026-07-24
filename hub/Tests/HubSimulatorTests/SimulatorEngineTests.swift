@@ -83,6 +83,49 @@ final class SimulatorEngineTests: XCTestCase {
         )
       )
     )
+    XCTAssertThrowsError(
+      try simulator.addTracker(
+        SimulatorTrackerConfiguration(
+          trackerID: "walk",
+          role: "",
+          position: Vector3(x: 0, y: 0, z: 0),
+          motion: .walk(
+            strideLengthMeters: 0.3,
+            stepHeightMeters: -0.1,
+            cadenceHz: 1.6,
+            phaseRadians: 0
+          )
+        )
+      )
+    )
+    XCTAssertThrowsError(
+      try simulator.addTracker(
+        SimulatorTrackerConfiguration(
+          trackerID: "jump",
+          role: "",
+          position: Vector3(x: 0, y: 0, z: 0),
+          motion: .jump(
+            heightMeters: 0.3,
+            frequencyHz: 0,
+            phaseRadians: 0
+          )
+        )
+      )
+    )
+    XCTAssertThrowsError(
+      try simulator.addTracker(
+        SimulatorTrackerConfiguration(
+          trackerID: "random",
+          role: "",
+          position: Vector3(x: 0, y: 0, z: 0),
+          motion: .random(
+            maximumOffsetMeters: Vector3(x: 1, y: -.infinity, z: 1),
+            frequencyHz: 0.2,
+            seed: 1
+          )
+        )
+      )
+    )
   }
 
   func testnilのsource識別子を拒否する() throws {
@@ -208,6 +251,149 @@ final class SimulatorEngineTests: XCTestCase {
       0,
       accuracy: 1e-5
     )
+  }
+
+  func testWalkは位相付き歩行軌道と速度を生成する() throws {
+    var simulator = try SimulatorEngine(
+      source: try source(rate: .hz120),
+      trackers: [
+        SimulatorTrackerConfiguration(
+          trackerID: "walk",
+          role: "left_foot",
+          position: Vector3(x: 1, y: 2, z: -3),
+          motion: .walk(
+            strideLengthMeters: 2,
+            stepHeightMeters: 1,
+            cadenceHz: 1,
+            phaseRadians: 0
+          )
+        )
+      ]
+    )
+
+    let atContact = try emitted(
+      simulator.step(receivedMonotonicNS: 0)
+    ).poseBatch.trackers[0]
+    XCTAssertEqual(atContact.position.x, 1, accuracy: 1e-5)
+    XCTAssertEqual(atContact.position.y, 2, accuracy: 1e-5)
+    XCTAssertEqual(atContact.position.z, -4, accuracy: 1e-5)
+    XCTAssertEqual(atContact.linearVelocity?.y ?? 1, 0, accuracy: 1e-5)
+    XCTAssertEqual(atContact.linearVelocity?.z ?? 1, 0, accuracy: 1e-5)
+
+    var atLift = atContact
+    for timestamp in 1...30 {
+      atLift = try emitted(
+        simulator.step(receivedMonotonicNS: UInt64(timestamp))
+      ).poseBatch.trackers[0]
+    }
+    XCTAssertEqual(atLift.position.y, 3, accuracy: 1e-5)
+    XCTAssertEqual(atLift.position.z, -3, accuracy: 1e-5)
+    XCTAssertEqual(atLift.linearVelocity?.y ?? 1, 0, accuracy: 1e-5)
+    XCTAssertEqual(
+      atLift.linearVelocity?.z ?? 0,
+      2 * .pi,
+      accuracy: 1e-5
+    )
+  }
+
+  func testJumpは滑らかな反復上下動と速度を生成する() throws {
+    var simulator = try SimulatorEngine(
+      source: try source(rate: .hz120),
+      trackers: [
+        SimulatorTrackerConfiguration(
+          trackerID: "jump",
+          role: "waist",
+          position: Vector3(x: 1, y: 2, z: -3),
+          motion: .jump(
+            heightMeters: 3,
+            frequencyHz: 1,
+            phaseRadians: 0
+          )
+        )
+      ]
+    )
+
+    let atGround = try emitted(
+      simulator.step(receivedMonotonicNS: 0)
+    ).poseBatch.trackers[0]
+    XCTAssertEqual(atGround.position.y, 2, accuracy: 1e-5)
+    XCTAssertEqual(atGround.linearVelocity?.y ?? 1, 0, accuracy: 1e-5)
+
+    var ascending = atGround
+    for timestamp in 1...30 {
+      ascending = try emitted(
+        simulator.step(receivedMonotonicNS: UInt64(timestamp))
+      ).poseBatch.trackers[0]
+    }
+    XCTAssertEqual(ascending.position.y, 3.5, accuracy: 1e-5)
+    XCTAssertEqual(
+      ascending.linearVelocity?.y ?? 0,
+      3 * .pi,
+      accuracy: 1e-5
+    )
+
+    var atApex = ascending
+    for timestamp in 31...60 {
+      atApex = try emitted(
+        simulator.step(receivedMonotonicNS: UInt64(timestamp))
+      ).poseBatch.trackers[0]
+    }
+    XCTAssertEqual(atApex.position.y, 5, accuracy: 1e-5)
+    XCTAssertEqual(atApex.linearVelocity?.y ?? 1, 0, accuracy: 1e-5)
+  }
+
+  func testRandomはseedごとに滑らかで有界な軌道を再現する() throws {
+    let configuration = SimulatorTrackerConfiguration(
+      trackerID: "random",
+      role: "prop",
+      position: Vector3(x: 1, y: 2, z: -3),
+      motion: .random(
+        maximumOffsetMeters: Vector3(x: 0.4, y: 0.25, z: 0.6),
+        frequencyHz: 0.2,
+        seed: 42
+      )
+    )
+    var first = try SimulatorEngine(
+      source: try source(rate: .hz120),
+      trackers: [configuration]
+    )
+    var second = try SimulatorEngine(
+      source: try source(rate: .hz120),
+      trackers: [configuration],
+      faults: try SimulatorFaultConfiguration(
+        seed: 999,
+        frameLossProbability: 0,
+        trackingLostProbability: 1
+      )
+    )
+    var firstPosition: Vector3?
+    var changed = false
+
+    for index in 0..<1_000 {
+      let firstFrame = try emitted(
+        first.step(receivedMonotonicNS: UInt64(index))
+      )
+      let secondFrame = try emitted(
+        second.step(receivedMonotonicNS: UInt64(index))
+      )
+      let firstPose = try XCTUnwrap(firstFrame.poseBatch.trackers.first)
+      let secondPose = try XCTUnwrap(secondFrame.poseBatch.trackers.first)
+
+      XCTAssertEqual(firstPose.position, secondPose.position)
+      XCTAssertEqual(firstPose.linearVelocity, secondPose.linearVelocity)
+      XCTAssertEqual(secondPose.trackingState, .lost)
+      XCTAssertLessThanOrEqual(abs(firstPose.position.x - 1), 0.400_001)
+      XCTAssertLessThanOrEqual(abs(firstPose.position.y - 2), 0.250_001)
+      XCTAssertLessThanOrEqual(abs(firstPose.position.z + 3), 0.600_001)
+      XCTAssertNotNil(firstPose.linearVelocity)
+
+      if let firstPosition, firstPosition != firstPose.position {
+        changed = true
+      }
+      firstPosition = firstPose.position
+    }
+
+    XCTAssertTrue(changed)
   }
 
   func test同じseedならfault結果を再現できる() throws {

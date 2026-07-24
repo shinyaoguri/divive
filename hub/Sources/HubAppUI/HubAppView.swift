@@ -1,376 +1,1316 @@
+import Charts
 import HubProtocol
 import HubSimulator
 import SwiftUI
 
 public struct HubAppView: View {
-  @StateObject private var model: HubAppModel
+  @ObservedObject private var model: HubAppModel
+  @State private var showsConfiguration = false
+  @State private var selectedTrackerID: String?
 
-  public init() {
-    _model = StateObject(wrappedValue: HubAppModel())
+  public init(model: HubAppModel) {
+    self.model = model
   }
 
   public var body: some View {
-    NavigationSplitView {
-      SourceControlView(model: model)
-        .navigationSplitViewColumnWidth(
-          min: 270,
-          ideal: 300,
-          max: 340
-        )
-    } detail: {
-      HubDashboardView(model: model)
+    NavigationStack {
+      HubWorkspace(
+        model: model,
+        selectedTrackerID: $selectedTrackerID
+      )
+      .toolbar {
+        ToolbarItem(placement: .navigation) {
+          SourcePicker(model: model)
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
+          SourceActionButton(model: model)
+        }
+
+        #if compiler(>=6.2)
+          if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+          }
+        #endif
+
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            showsConfiguration = true
+          } label: {
+            Label("入力設定", systemImage: "gearshape")
+          }
+          .help("\(model.selectedSource.displayName)の設定")
+          .accessibilityIdentifier("configuration-button")
+          .popover(
+            isPresented: $showsConfiguration,
+            arrowEdge: .top
+          ) {
+            SourceConfigurationPanel(model: model)
+          }
+        }
+      }
     }
-    .frame(minWidth: 1_050, minHeight: 700)
-    .task {
-      await model.refreshUntilCancelled()
+    .frame(minWidth: 1_120, minHeight: 700)
+  }
+}
+
+private struct SourcePicker: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    sourceControl
+      .onChange(of: model.selectedSource) {
+        guard model.isRunning else { return }
+        Task {
+          await model.startSelectedSource()
+        }
+      }
+  }
+
+  @ViewBuilder
+  private var sourceControl: some View {
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *) {
+        LiquidGlassSourceToggle(model: model)
+      } else {
+        StandardSourcePicker(model: model)
+      }
+    #else
+      StandardSourcePicker(model: model)
+    #endif
+  }
+}
+
+private struct StandardSourcePicker: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    Picker("入力元", selection: $model.selectedSource) {
+      ForEach(HubInputSource.allCases) { source in
+        Text(source.shortDisplayName)
+          .tag(source)
+      }
+    }
+    .labelsHidden()
+    .pickerStyle(.segmented)
+    .frame(width: 230)
+    .accessibilityIdentifier("source-picker")
+  }
+}
+
+#if compiler(>=6.2)
+  @available(macOS 26.0, *)
+  private struct LiquidGlassSourceToggle: View {
+    @ObservedObject var model: HubAppModel
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+
+    private let controlWidth: CGFloat = 246
+    private let controlHeight: CGFloat = 40
+    private let contentInset: CGFloat = 4
+
+    private var segmentWidth: CGFloat {
+      (controlWidth - contentInset * 2) / 2
+    }
+
+    private var selectionOffset: CGFloat {
+      contentInset
+        + (model.selectedSource == .simulator ? segmentWidth : 0)
+    }
+
+    private var selectionAnimation: Animation? {
+      guard !reduceMotion else { return nil }
+      return .spring(
+        response: 0.34,
+        dampingFraction: 1,
+        blendDuration: 0
+      )
+    }
+
+    var body: some View {
+      ZStack(alignment: .leading) {
+        selectionGlass
+          .frame(
+            width: segmentWidth,
+            height: controlHeight - contentInset * 2
+          )
+          .offset(x: selectionOffset)
+          .allowsHitTesting(false)
+          .zIndex(0)
+
+        HStack(spacing: 0) {
+          ForEach(HubInputSource.allCases) { source in
+            sourceButton(source)
+          }
+        }
+        .padding(.horizontal, contentInset)
+        .zIndex(1)
+      }
+      .frame(width: controlWidth, height: controlHeight)
+      .background {
+        Capsule()
+          .fill(
+            Color.primary.opacity(reduceTransparency ? 0.1 : 0.028)
+          )
+          .overlay {
+            Capsule()
+              .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+          }
+      }
+      .animation(selectionAnimation, value: model.selectedSource)
+      .accessibilityElement(children: .contain)
+      .accessibilityLabel("入力元")
+      .accessibilityIdentifier("source-picker")
+    }
+
+    @ViewBuilder
+    private var selectionGlass: some View {
+      if reduceTransparency {
+        Capsule()
+          .fill(Color.accentColor.opacity(0.2))
+          .overlay {
+            Capsule()
+              .stroke(Color.accentColor.opacity(0.38), lineWidth: 1)
+          }
+      } else {
+        Color.clear
+          .glassEffect(
+            .regular.tint(Color.accentColor.opacity(0.3)),
+            in: Capsule()
+          )
+      }
+    }
+
+    private func sourceButton(
+      _ source: HubInputSource
+    ) -> some View {
+      let isSelected = model.selectedSource == source
+
+      return Button {
+        guard !isSelected else { return }
+        model.selectedSource = source
+      } label: {
+        Text(source.shortDisplayName)
+          .font(.callout.weight(isSelected ? .semibold : .medium))
+          .foregroundStyle(
+            isSelected ? Color.primary : Color.secondary
+          )
+          .frame(
+            width: segmentWidth,
+            height: controlHeight - contentInset * 2
+          )
+          .contentShape(Capsule())
+      }
+      .buttonStyle(
+        SourceTogglePressStyle(reduceMotion: reduceMotion)
+      )
+      .accessibilityLabel(source.shortDisplayName)
+      .accessibilityValue(isSelected ? "選択中" : "未選択")
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
+      .accessibilityIdentifier("source-\(source.rawValue)-button")
+    }
+  }
+
+  private struct SourceTogglePressStyle: ButtonStyle {
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+      configuration.label
+        .scaleEffect(configuration.isPressed ? 0.97 : 1)
+        .opacity(configuration.isPressed ? 0.78 : 1)
+        .animation(
+          reduceMotion ? nil : .easeOut(duration: 0.1),
+          value: configuration.isPressed
+        )
+    }
+  }
+#endif
+
+private struct SourceActionButton: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    if model.isRunning {
+      Button(role: .destructive) {
+        Task {
+          await model.stopActiveSource()
+        }
+      } label: {
+        Label("停止", systemImage: "stop.fill")
+          .labelStyle(.iconOnly)
+          .frame(width: 28, height: 16)
+      }
+      .buttonStyle(.bordered)
+      .help("\(model.displayedSource.displayName)を停止")
+      .accessibilityIdentifier("source-stop-button")
+    } else {
+      Button {
+        Task {
+          await model.startSelectedSource()
+        }
+      } label: {
+        Label(
+          model.selectedSource == .network ? "受信開始" : "開始",
+          systemImage: "play.fill"
+        )
+        .labelStyle(.iconOnly)
+        .frame(width: 28, height: 16)
+      }
+      .buttonStyle(.borderedProminent)
+      .help("\(model.selectedSource.displayName)を開始")
+      .accessibilityIdentifier("source-start-button")
     }
   }
 }
 
-private struct SourceControlView: View {
+private struct HubWorkspace: View {
+  @ObservedObject var model: HubAppModel
+  @Binding var selectedTrackerID: String?
+
+  var body: some View {
+    HSplitView {
+      SpatialStage(
+        model: model,
+        selectedTrackerID: selectedTrackerID ?? model.trackers.first?.id
+      )
+      .frame(minWidth: 690)
+      .layoutPriority(1)
+
+      TrackerInspector(
+        model: model,
+        selectedTrackerID: $selectedTrackerID
+      )
+      .frame(minWidth: 350, idealWidth: 380, maxWidth: 420)
+    }
+    .background(Color(nsColor: .controlBackgroundColor))
+  }
+}
+
+private struct SpatialStage: View {
+  @ObservedObject var model: HubAppModel
+  let selectedTrackerID: String?
+
+  var body: some View {
+    ZStack {
+      TrackerTopDownView(
+        trackers: model.trackers,
+        source: model.displayedSource,
+        selectedTrackerID: selectedTrackerID
+      )
+      .accessibilityIdentifier("tracker-space-preview")
+
+      VStack {
+        HStack(alignment: .top) {
+          StageStatusPill(model: model)
+          Spacer()
+          CoordinateLegend()
+        }
+
+        Spacer()
+      }
+      .padding(18)
+    }
+    .overlay(alignment: .center) {
+      if model.trackers.isEmpty {
+        EmptyStage(model: model)
+      }
+    }
+  }
+}
+
+private struct StageStatusPill: View {
+  @ObservedObject var model: HubAppModel
+  @Environment(\.accessibilityReduceTransparency)
+  private var reduceTransparency
+
+  private var content: some View {
+    HStack(spacing: 10) {
+      Image(
+        systemName: model.isRunning
+          ? "dot.radiowaves.left.and.right"
+          : "pause.fill"
+      )
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(model.isRunning ? .green : .secondary)
+
+      Text(model.statusTitle)
+        .font(.subheadline.weight(.semibold))
+
+      Divider()
+        .frame(height: 16)
+
+      Text(String(format: "%.1f Hz", model.observedRateHz))
+        .font(.subheadline.monospacedDigit())
+        .foregroundStyle(.secondary)
+
+      Text("\(model.trackers.count)台")
+        .font(.subheadline.monospacedDigit())
+        .foregroundStyle(.secondary)
+    }
+    .padding(.horizontal, 14)
+    .frame(height: 38)
+    .accessibilityElement(children: .combine)
+  }
+
+  @ViewBuilder
+  var body: some View {
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *), !reduceTransparency {
+        content
+          .glassEffect(.regular, in: Capsule())
+      } else if reduceTransparency {
+        content
+          .background(
+            Color(nsColor: .windowBackgroundColor),
+            in: Capsule()
+          )
+          .overlay {
+            Capsule()
+              .stroke(.separator, lineWidth: 1)
+          }
+      } else {
+        content
+          .background(.regularMaterial, in: Capsule())
+      }
+    #else
+      if reduceTransparency {
+        content
+          .background(
+            Color(nsColor: .windowBackgroundColor),
+            in: Capsule()
+          )
+          .overlay {
+            Capsule()
+              .stroke(.separator, lineWidth: 1)
+          }
+      } else {
+        content
+          .background(.regularMaterial, in: Capsule())
+      }
+    #endif
+  }
+}
+
+private struct CoordinateLegend: View {
+  var body: some View {
+    Text("X →   −Z ↑   ±2 m")
+      .font(.caption.monospaced())
+      .foregroundStyle(.secondary)
+      .padding(.horizontal, 10)
+      .frame(height: 30)
+      .background(
+        Color(nsColor: .controlBackgroundColor).opacity(0.82),
+        in: Capsule()
+      )
+      .accessibilityLabel("表示範囲は前後左右2メートル")
+  }
+}
+
+private struct EmptyStage: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
-    Form {
-      Section {
-        HStack(spacing: 8) {
-          Circle()
-            .fill(model.isRunning ? Color.green : Color.secondary)
-            .frame(width: 10, height: 10)
-          Text(model.statusTitle)
-            .font(.headline)
-        }
-        if model.activeSource == .network,
-          let endpoint = model.boundEndpoint
-        {
-          Text(endpoint)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-        }
-      }
-
-      Section("入力Source") {
-        Picker("入力Source", selection: $model.selectedSource) {
-          ForEach(HubInputSource.allCases) { source in
-            Text(source.displayName).tag(source)
-          }
-        }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-      }
-
-      if model.selectedSource == .simulator {
-        Section("シーン") {
-          Stepper(
-            "Tracker: \(model.trackerCount)台",
-            value: $model.trackerCount,
-            in: 1...16
-          )
-
-          Picker("Motion", selection: $model.motion) {
-            ForEach(HubAppMotionPreset.allCases) { motion in
-              Text(motion.displayName).tag(motion)
-            }
-          }
-
-          Picker("更新頻度", selection: $model.rate) {
-            ForEach(SimulatorRate.allCases, id: \.rawValue) { rate in
-              Text("\(rate.rawValue) Hz").tag(rate)
-            }
-          }
-          .pickerStyle(.segmented)
-
-          TextField("Seed", text: $model.seedText)
-            .textFieldStyle(.roundedBorder)
-        }
-
-        Section("障害注入") {
-          LabeledContent(
-            "Frame loss",
-            value: model.frameLossPercent,
-            format: .number.precision(.fractionLength(1)),
-            suffix: "%"
-          )
-          Slider(value: $model.frameLossPercent, in: 0...50, step: 0.5)
-
-          LabeledContent(
-            "Tracking lost",
-            value: model.trackingLostPercent,
-            format: .number.precision(.fractionLength(1)),
-            suffix: "%"
-          )
-          Slider(
-            value: $model.trackingLostPercent,
-            in: 0...50,
-            step: 0.5
-          )
-        }
-      } else {
-        Section("UDP Listener") {
-          TextField("Bind address", text: $model.networkBindHost)
-            .textFieldStyle(.roundedBorder)
-          TextField("UDP port", text: $model.networkPortText)
-            .textFieldStyle(.roundedBorder)
-          Text(
-            "`127.0.0.1`はMac内の試験用、`0.0.0.0`はLAN上のBridgeを受信します。"
-          )
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        }
-      }
-
-      Section {
+    ContentUnavailableView {
+      Label(
+        "Trackerを待っています",
+        systemImage: "sensor.tag.radiowaves.forward"
+      )
+    } description: {
+      Text(
+        model.selectedSource == .simulator
+          ? "シミュレータを開始すると、ここに動きが表示されます。"
+          : "受信を開始して、Windows Bridgeを接続してください。"
+      )
+    } actions: {
+      if !model.isRunning {
         Button {
-          Task { await model.startSelectedSource() }
+          Task {
+            await model.startSelectedSource()
+          }
         } label: {
-          Label(
-            model.startButtonTitle,
-            systemImage: model.isRunning ? "arrow.clockwise" : "play.fill"
+          Text(
+            model.selectedSource == .network
+              ? "受信を開始"
+              : "シミュレータを開始"
           )
-          .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-
-        Button(role: .destructive) {
-          Task { await model.stopActiveSource() }
-        } label: {
-          Label("停止", systemImage: "stop.fill")
-            .frame(maxWidth: .infinity)
-        }
-        .disabled(!model.isRunning)
-      }
-
-      if let errorMessage = model.errorMessage {
-        Section {
-          Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.red)
-            .font(.caption)
-        }
-      }
-
-      Section {
-        Text("Source切替時は現在のSourceを停止し、選択した設定で再開します。")
-        .font(.caption)
-        .foregroundStyle(.secondary)
       }
     }
-    .formStyle(.grouped)
-    .navigationTitle("Divive Hub")
+    .frame(maxWidth: 360)
   }
 }
 
-private struct HubDashboardView: View {
+private struct TrackerInspector: View {
   @ObservedObject var model: HubAppModel
+  @Binding var selectedTrackerID: String?
 
-  private let columns = [
-    GridItem(.adaptive(minimum: 150), spacing: 12)
-  ]
-
-  private var metricItems: [MetricItem] {
-    var items = [
-      MetricItem(
-        title: "Hub更新レート",
-        value: String(format: "%.1f Hz", model.observedRateHz),
-        systemImage: "waveform.path.ecg"
-      ),
-      MetricItem(
-        title: "Tracker",
-        value: "\(model.trackers.count) 台",
-        systemImage: "dot.radiowaves.left.and.right"
-      ),
-    ]
-    switch model.displayedSource {
-    case .simulator:
-      items.append(
-        MetricItem(
-          title: "Frame loss",
-          value: String(format: "%.1f%%", model.droppedPercent),
-          systemImage: "arrow.down.right.and.arrow.up.left"
-        )
-      )
-      items.append(
-        MetricItem(
-          title: "Deadline miss",
-          value: "\(model.missedDeadlines)",
-          systemImage: "clock.badge.exclamationmark"
-        )
-      )
-    case .network:
-      items.append(
-        MetricItem(
-          title: "UDP datagram",
-          value: "\(model.receivedDatagrams)",
-          systemImage: "network"
-        )
-      )
-      items.append(
-        MetricItem(
-          title: "欠落Frame",
-          value: "\(model.missingFrames)",
-          systemImage: "arrow.down.right.and.arrow.up.left"
-        )
-      )
-      items.append(
-        MetricItem(
-          title: "順序逆転",
-          value: "\(model.outOfOrderPackets)",
-          systemImage: "arrow.up.arrow.down"
-        )
-      )
-      items.append(
-        MetricItem(
-          title: "受信異常",
-          value: "\(model.networkAnomalyCount)",
-          systemImage: "exclamationmark.triangle"
-        )
-      )
-      items.append(
-        MetricItem(
-          title: "受信処理",
-          value: "\(model.lastProcessingMicroseconds) µs",
-          systemImage: "timer"
-        )
-      )
-    }
-    return items
+  private var selectedTracker: TrackerDisplayState? {
+    model.trackers.first {
+      $0.id == selectedTrackerID
+    } ?? model.trackers.first
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 18) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Tracker Monitor")
-            .font(.largeTitle.bold())
-          Text(model.dashboardSubtitle)
-            .foregroundStyle(.secondary)
-        }
+    VStack(alignment: .leading, spacing: 12) {
+      InspectorHeader(
+        trackers: model.trackers
+      )
 
-        LazyVGrid(columns: columns, spacing: 12) {
-          ForEach(metricItems) { item in
-            MetricCard(
-              title: item.title,
-              value: item.value,
-              systemImage: item.systemImage
-            )
-          }
-        }
+      if let errorMessage = model.errorMessage {
+        ErrorBanner(message: errorMessage)
+      }
 
-        GroupBox("空間プレビュー — 上面図 X / -Z（±2m）") {
-          TrackerTopDownView(
-            trackers: model.trackers,
-            source: model.displayedSource
+      if model.trackers.isEmpty {
+        Spacer()
+        Text("接続するとTrackerの状態がここに表示されます。")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: .infinity)
+        Spacer()
+      } else {
+        TrackerGrid(
+          trackers: model.trackers,
+          selectedTrackerID: selectedTracker?.id
+        ) { trackerID in
+          selectedTrackerID = trackerID
+        }
+        .accessibilityIdentifier("tracker-grid")
+
+        Spacer(minLength: 6)
+
+        Divider()
+
+        if let selectedTracker {
+          SelectedTrackerPanel(
+            tracker: selectedTracker,
+            history: model.trackerHistory(for: selectedTracker.id),
+            usesCompactLayout: model.trackers.count > 8
           )
-            .frame(minHeight: 300)
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-          HStack {
-            Text("Tracker一覧")
-              .font(.title2.bold())
-            Spacer()
-            Text(model.summaryText)
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-          }
-          TrackerTable(trackers: model.trackers)
-            .frame(minHeight: 230)
         }
       }
-      .padding(22)
+
+      Divider()
+
+      DiagnosticsSection(model: model)
     }
-    .background(Color(nsColor: .windowBackgroundColor))
+    .padding(16)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(.regularMaterial)
   }
 }
 
-private struct MetricItem: Identifiable {
+private struct InspectorHeader: View {
+  let trackers: [TrackerDisplayState]
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text("トラッカー")
+        .font(.title2.weight(.semibold))
+
+      Text("\(trackers.count)")
+        .font(.caption.monospacedDigit().weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+          Color.secondary.opacity(0.1),
+          in: Capsule()
+        )
+
+      Spacer()
+
+      TrackerStateSummary(trackers: trackers)
+    }
+  }
+}
+
+private struct TrackerGrid: View {
+  let trackers: [TrackerDisplayState]
+  let selectedTrackerID: String?
+  let onSelect: (String) -> Void
+
+  private var usesCompactRows: Bool {
+    trackers.count > 8
+  }
+
+  private var rowSpacing: CGFloat {
+    usesCompactRows ? 4 : 7
+  }
+
+  private var columns: [GridItem] {
+    [
+      GridItem(.flexible(), spacing: rowSpacing),
+      GridItem(.flexible(), spacing: rowSpacing),
+    ]
+  }
+
+  var body: some View {
+    LazyVGrid(
+      columns: columns,
+      alignment: .leading,
+      spacing: rowSpacing
+    ) {
+      ForEach(trackers.prefix(16)) { tracker in
+        Button {
+          onSelect(tracker.id)
+        } label: {
+          TrackerTile(
+            tracker: tracker,
+            isSelected: selectedTrackerID == tracker.id,
+            usesCompactRows: usesCompactRows
+          )
+        }
+        .buttonStyle(.plain)
+        .help(tracker.id)
+      }
+    }
+  }
+}
+
+private struct TrackerTile: View {
+  let tracker: TrackerDisplayState
+  let isSelected: Bool
+  let usesCompactRows: Bool
+
+  var body: some View {
+    HStack(spacing: 7) {
+      Image(systemName: tracker.trackingState.statusSymbol)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(tracker.trackingState.displayColor)
+        .frame(width: 12)
+        .accessibilityLabel(tracker.trackingState.displayName)
+
+      Text(tracker.role.isEmpty ? "未割当" : tracker.role)
+        .font(.caption.weight(.medium))
+        .lineLimit(1)
+
+      Spacer(minLength: 3)
+
+      Text(String(format: "%.0f", tracker.ageMilliseconds))
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.tertiary)
+        .accessibilityLabel(
+          String(format: "更新から%.0fミリ秒", tracker.ageMilliseconds)
+        )
+    }
+    .padding(.horizontal, 9)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: usesCompactRows ? 32 : 36
+    )
+    .contentShape(RoundedRectangle(cornerRadius: 9))
+    .background(
+      isSelected
+        ? Color.accentColor.opacity(0.16)
+        : Color.primary.opacity(0.045),
+      in: RoundedRectangle(cornerRadius: 9)
+    )
+    .overlay {
+      if isSelected {
+        RoundedRectangle(cornerRadius: 9)
+          .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
+      }
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+}
+
+private struct SelectedTrackerPanel: View {
+  let tracker: TrackerDisplayState
+  let history: [TrackerHistorySample]
+  let usesCompactLayout: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      HStack {
+        Text(tracker.role.isEmpty ? "未割当" : tracker.role)
+          .font(.headline)
+          .lineLimit(1)
+
+        Spacer()
+
+        Label(
+          tracker.trackingState.displayName,
+          systemImage: tracker.trackingState.statusSymbol
+        )
+        .font(.caption.weight(.medium))
+        .foregroundStyle(tracker.trackingState.displayColor)
+      }
+
+      Text(tracker.id)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .help(tracker.id)
+
+      HStack(spacing: 8) {
+        PositionValue(axis: "X", value: tracker.position.x)
+        PositionValue(axis: "Y", value: tracker.position.y)
+        PositionValue(axis: "Z", value: tracker.position.z)
+      }
+
+      TrackerQualityHistory(
+        history: history,
+        height: usesCompactLayout ? 62 : 82
+      )
+
+      LabeledContent("最終更新") {
+        Text(String(format: "%.0f ms前", tracker.ageMilliseconds))
+          .monospacedDigit()
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+    .accessibilityElement(children: .contain)
+  }
+}
+
+private struct TrackerQualityInterval: Identifiable {
+  let id: UInt64
+  let startSeconds: Double
+  let endSeconds: Double
+}
+
+private struct TrackerQualityHistory: View {
+  let history: [TrackerHistorySample]
+  let height: CGFloat
+
+  private let visibleDurationSeconds = 6.0
+
+  private var visibleSamples: [TrackerHistorySample] {
+    guard let latestTimestamp = history.last?.sampledAtNS else { return [] }
+    let durationNS = UInt64(visibleDurationSeconds * 1_000_000_000)
+    let lowerBound =
+      latestTimestamp > durationNS
+      ? latestTimestamp - durationNS
+      : 0
+    return history.filter { $0.sampledAtNS >= lowerBound }
+  }
+
+  private var latestTimestamp: UInt64 {
+    visibleSamples.last?.sampledAtNS ?? 0
+  }
+
+  private var frameLossIntervals: [TrackerQualityInterval] {
+    visibleSamples.enumerated().compactMap { index, sample in
+      guard sample.frameLossCount > 0 else { return nil }
+      let endSeconds = seconds(for: sample)
+      let startSeconds =
+        index > 0
+        ? seconds(for: visibleSamples[index - 1])
+        : max(-visibleDurationSeconds, endSeconds - 0.1)
+      return TrackerQualityInterval(
+        id: sample.sampledAtNS,
+        startSeconds: startSeconds,
+        endSeconds: endSeconds
+      )
+    }
+  }
+
+  private var trackingLossIntervals: [TrackerQualityInterval] {
+    var intervals: [TrackerQualityInterval] = []
+    var lossStartIndex: Int?
+
+    for (index, sample) in visibleSamples.enumerated() {
+      if !sample.trackingState.hasUsablePose {
+        lossStartIndex = lossStartIndex ?? index
+        continue
+      }
+      guard let startIndex = lossStartIndex else { continue }
+      let startSample = visibleSamples[startIndex]
+      intervals.append(
+        TrackerQualityInterval(
+          id: startSample.sampledAtNS,
+          startSeconds: seconds(for: startSample),
+          endSeconds: seconds(for: sample)
+        )
+      )
+      lossStartIndex = nil
+    }
+
+    if let startIndex = lossStartIndex {
+      let startSample = visibleSamples[startIndex]
+      intervals.append(
+        TrackerQualityInterval(
+          id: startSample.sampledAtNS,
+          startSeconds: seconds(for: startSample),
+          endSeconds: 0
+        )
+      )
+    }
+    return intervals
+  }
+
+  private var trackingLossStarts: [TrackerHistorySample] {
+    visibleSamples.enumerated().compactMap { index, sample in
+      guard !sample.trackingState.hasUsablePose else { return nil }
+      guard
+        index == 0
+          || visibleSamples[index - 1].trackingState.hasUsablePose
+      else {
+        return nil
+      }
+      return sample
+    }
+  }
+
+  private var qualitySummary: TrackerQualitySummary {
+    TrackerQualitySummary(samples: visibleSamples)
+  }
+
+  private var hasTrackingLoss: Bool {
+    visibleSamples.contains {
+      !$0.trackingState.hasUsablePose
+    }
+  }
+
+  private var accessibilityValue: String {
+    guard !visibleSamples.isEmpty else {
+      return "履歴はまだありません"
+    }
+    return
+      "フレーム欠落\(qualitySummary.frameLossCount)件、"
+      + "\(frameLossPercentText)、"
+      + "追跡喪失\(trackingLossPercentText)"
+  }
+
+  private var frameLossPercentText: String {
+    String(format: "%.1f%%", qualitySummary.frameLossPercent)
+  }
+
+  private var trackingLossPercentText: String {
+    String(format: "%.1f%%", qualitySummary.trackingLossPercent)
+  }
+
+  private func seconds(
+    for sample: TrackerHistorySample
+  ) -> Double {
+    let ageNanoseconds = latestTimestamp - sample.sampledAtNS
+    return -Double(ageNanoseconds) / 1_000_000_000
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        Text("品質の推移")
+          .font(.caption.weight(.semibold))
+
+        Text("直近6秒")
+          .font(.caption2)
+          .foregroundStyle(.tertiary)
+
+        Spacer()
+
+        HStack(spacing: 10) {
+          Text(
+            "欠落 \(qualitySummary.frameLossCount)件 "
+              + frameLossPercentText
+          )
+          .foregroundStyle(
+            qualitySummary.frameLossCount > 0
+              ? Color.orange : Color.secondary
+          )
+
+          Text("喪失 \(trackingLossPercentText)")
+            .foregroundStyle(
+              hasTrackingLoss ? Color.red : Color.secondary
+            )
+        }
+        .font(.caption2.monospacedDigit().weight(.medium))
+      }
+
+      if visibleSamples.isEmpty {
+        Text("受信を開始すると品質履歴が表示されます")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, minHeight: 70)
+          .background(
+            Color.primary.opacity(0.035),
+            in: RoundedRectangle(cornerRadius: 8)
+          )
+      } else {
+        Chart {
+          RuleMark(
+            y: .value("フレーム欠落", 1.5)
+          )
+          .foregroundStyle(Color.secondary.opacity(0.22))
+          .lineStyle(
+            StrokeStyle(
+              lineWidth: 1,
+              lineCap: .round,
+              lineJoin: .round
+            )
+          )
+
+          RuleMark(
+            y: .value("追跡状態", 0.5)
+          )
+          .foregroundStyle(Color.green.opacity(0.38))
+          .lineStyle(
+            StrokeStyle(
+              lineWidth: 2,
+              lineCap: .round
+            )
+          )
+
+          ForEach(frameLossIntervals) { interval in
+            RectangleMark(
+              xStart: .value("検出区間の開始", interval.startSeconds),
+              xEnd: .value("検出区間の終了", interval.endSeconds),
+              yStart: .value("欠落lane下端", 1.18),
+              yEnd: .value("欠落lane上端", 1.82)
+            )
+            .foregroundStyle(Color.orange.opacity(0.82))
+            .cornerRadius(2)
+          }
+
+          ForEach(trackingLossIntervals) { interval in
+            RectangleMark(
+              xStart: .value("喪失区間の開始", interval.startSeconds),
+              xEnd: .value("喪失区間の終了", interval.endSeconds),
+              yStart: .value("追跡lane下端", 0.18),
+              yEnd: .value("追跡lane上端", 0.82)
+            )
+            .foregroundStyle(Color.red.opacity(0.72))
+            .cornerRadius(2)
+          }
+
+          ForEach(trackingLossStarts) { sample in
+            PointMark(
+              x: .value("追跡喪失の検出時刻", seconds(for: sample)),
+              y: .value("追跡状態", 0.5)
+            )
+            .foregroundStyle(.red)
+            .symbolSize(18)
+          }
+        }
+        .chartXScale(domain: -visibleDurationSeconds...0)
+        .chartYScale(domain: 0...2)
+        .chartXAxis {
+          AxisMarks(values: [-visibleDurationSeconds, 0]) { value in
+            AxisGridLine()
+              .foregroundStyle(Color.secondary.opacity(0.1))
+            AxisValueLabel {
+              if let seconds = value.as(Double.self) {
+                Text(seconds == 0 ? "現在" : "6秒前")
+              }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+          }
+        }
+        .chartYAxis {
+          AxisMarks(
+            position: .leading,
+            values: [0.5, 1.5]
+          ) { value in
+            AxisValueLabel {
+              if let number = value.as(Double.self) {
+                Text(number < 1 ? "追跡" : "欠落")
+              }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+          }
+        }
+        .chartPlotStyle { plotArea in
+          plotArea
+            .background(Color.primary.opacity(0.025))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .frame(height: height)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("直近6秒の品質の推移")
+        .accessibilityValue(accessibilityValue)
+        .help(
+          "欠落率は期待frame数、喪失率は選択Trackerの観測時間に対する割合です"
+        )
+      }
+    }
+    .accessibilityIdentifier("tracker-quality-history")
+  }
+}
+
+private struct PositionValue: View {
+  let axis: String
+  let value: Float
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(axis)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.tertiary)
+      Text(String(format: "%.3f m", value))
+        .font(.caption.monospacedDigit())
+    }
+    .padding(.horizontal, 9)
+    .padding(.vertical, 6)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      Color.primary.opacity(0.045),
+      in: RoundedRectangle(cornerRadius: 8)
+    )
+    .accessibilityElement(children: .combine)
+  }
+}
+
+private struct DiagnosticsSection: View {
+  @ObservedObject var model: HubAppModel
+
+  private var items: [DiagnosticItem] {
+    switch model.displayedSource {
+    case .simulator:
+      [
+        DiagnosticItem(
+          title: "生成",
+          value: "\(model.attemptedFrames)"
+        ),
+        DiagnosticItem(
+          title: "出力",
+          value: "\(model.emittedFrames)"
+        ),
+        DiagnosticItem(
+          title: "欠落率",
+          value: String(format: "%.1f%%", model.droppedPercent)
+        ),
+        DiagnosticItem(
+          title: "期限超過",
+          value: "\(model.missedDeadlines)"
+        ),
+      ]
+    case .network:
+      [
+        DiagnosticItem(
+          title: "受信",
+          value: "\(model.receivedDatagrams)"
+        ),
+        DiagnosticItem(
+          title: "有効",
+          value: "\(model.validPackets)"
+        ),
+        DiagnosticItem(
+          title: "欠落",
+          value: "\(model.missingFrames)"
+        ),
+        DiagnosticItem(
+          title: "順序逆転",
+          value: "\(model.outOfOrderPackets)"
+        ),
+        DiagnosticItem(
+          title: "異常",
+          value: "\(model.networkAnomalyCount)"
+        ),
+        DiagnosticItem(
+          title: "受信処理",
+          value: "\(model.lastProcessingMicroseconds) µs"
+        ),
+      ]
+    }
+  }
+
+  private var needsAttention: Bool {
+    switch model.displayedSource {
+    case .simulator:
+      model.droppedFrames > 0 || model.missedDeadlines > 0
+    case .network:
+      model.missingFrames > 0 || model.networkAnomalyCount > 0
+    }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      HStack {
+        Text("診断")
+          .font(.subheadline.weight(.semibold))
+
+        Spacer()
+
+        Label(
+          needsAttention ? "要確認" : "問題なし",
+          systemImage: needsAttention
+            ? "exclamationmark.circle.fill"
+            : "checkmark.circle.fill"
+        )
+        .font(.caption.weight(.medium))
+        .foregroundStyle(needsAttention ? .orange : .green)
+      }
+
+      LazyVGrid(
+        columns: [
+          GridItem(.flexible(), spacing: 14),
+          GridItem(.flexible(), spacing: 14),
+        ],
+        alignment: .leading,
+        spacing: 6
+      ) {
+        ForEach(items) { item in
+          DiagnosticValue(item: item)
+        }
+      }
+    }
+    .accessibilityIdentifier("diagnostics-section")
+  }
+}
+
+private struct DiagnosticItem: Identifiable {
   let title: String
   let value: String
-  let systemImage: String
 
   var id: String { title }
 }
 
-private struct MetricCard: View {
-  let title: String
-  let value: String
-  let systemImage: String
+private struct DiagnosticValue: View {
+  let item: DiagnosticItem
 
   var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: systemImage)
-        .font(.title2)
-        .foregroundStyle(.tint)
-        .frame(width: 32)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Text(value)
-          .font(.title3.monospacedDigit().bold())
-      }
-      Spacer(minLength: 0)
+    HStack(spacing: 6) {
+      Text(item.title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+
+      Spacer(minLength: 4)
+
+      Text(item.value)
+        .font(.caption.monospacedDigit().weight(.medium))
+        .lineLimit(1)
     }
-    .padding(14)
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    .accessibilityElement(children: .combine)
   }
 }
 
-private struct TrackerTable: View {
+private struct TrackerStateSummary: View {
   let trackers: [TrackerDisplayState]
 
-  var body: some View {
-    Table(trackers) {
-      TableColumn("Role") { tracker in
-        VStack(alignment: .leading, spacing: 2) {
-          Text(tracker.role)
-          Text(tracker.id)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-        }
-      }
-      .width(min: 160, ideal: 190)
-
-      TableColumn("状態") { tracker in
-        Label(
-          tracker.trackingState.displayName,
-          systemImage: "circle.fill"
-        )
-        .foregroundStyle(tracker.trackingState.displayColor)
-      }
-      .width(min: 95, ideal: 110)
-
-      TableColumn("X") { tracker in
-        coordinate(tracker.position.x)
-      }
-      .width(70)
-
-      TableColumn("Y") { tracker in
-        coordinate(tracker.position.y)
-      }
-      .width(70)
-
-      TableColumn("Z") { tracker in
-        coordinate(tracker.position.z)
-      }
-      .width(70)
-
-      TableColumn("Age") { tracker in
-        Text(String(format: "%.0f ms", tracker.ageMilliseconds))
-          .monospacedDigit()
-      }
-      .width(75)
+  private var attentionCount: Int {
+    trackers.count {
+      $0.trackingState == .lost || $0.trackingState == .disconnected
     }
   }
 
-  private func coordinate(_ value: Float) -> some View {
-    Text(String(format: "%.3f", value))
-      .monospacedDigit()
+  var body: some View {
+    if attentionCount > 0 {
+      Label(
+        "\(attentionCount)件",
+        systemImage: "exclamationmark.circle.fill"
+      )
+      .font(.caption.weight(.medium))
+      .foregroundStyle(.orange)
+    } else if !trackers.isEmpty {
+      Label("正常", systemImage: "checkmark.circle.fill")
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.green)
+    }
+  }
+}
+
+private struct SourceConfigurationPanel: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text("\(model.selectedSource.displayName)の設定")
+          .font(.title3.weight(.semibold))
+        Text(
+          model.isRunning
+            ? "変更後に「設定を反映」を押してください。"
+            : "次回の開始時に反映されます。"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
+
+      Divider()
+
+      if model.selectedSource == .simulator {
+        SimulatorConfiguration(model: model)
+      } else {
+        NetworkConfiguration(model: model)
+      }
+
+      if let errorMessage = model.errorMessage {
+        ErrorBanner(message: errorMessage)
+      }
+
+      if model.isRunning {
+        Divider()
+
+        HStack {
+          Spacer()
+          Button {
+            Task {
+              await model.startSelectedSource()
+            }
+          } label: {
+            Text("設定を反映")
+          }
+          .buttonStyle(.borderedProminent)
+        }
+      }
+    }
+    .padding(20)
+    .frame(width: 360)
+  }
+}
+
+private struct SimulatorConfiguration: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      ConfigurationSectionTitle("動き")
+
+      LabeledContent("Tracker数") {
+        Stepper(
+          "\(model.trackerCount) 台",
+          value: $model.trackerCount,
+          in: 1...16
+        )
+        .fixedSize()
+      }
+
+      LabeledContent("モーション") {
+        Picker("モーション", selection: $model.motion) {
+          ForEach(HubAppMotionPreset.allCases) { motion in
+            Label(motion.displayName, systemImage: motion.systemImage)
+              .tag(motion)
+          }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 145, alignment: .trailing)
+        .accessibilityIdentifier("motion-picker")
+      }
+
+      LabeledContent("更新頻度") {
+        Picker("更新頻度", selection: $model.rate) {
+          ForEach(SimulatorRate.allCases, id: \.rawValue) { rate in
+            Text("\(rate.rawValue) Hz").tag(rate)
+          }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 95, alignment: .trailing)
+      }
+
+      Divider()
+
+      ConfigurationSectionTitle("障害のシミュレーション")
+
+      LabeledContent("再現用Seed") {
+        TextField("Seed", text: $model.seedText)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 96)
+      }
+
+      FaultControl(
+        title: "フレーム欠落",
+        value: $model.frameLossPercent
+      )
+
+      FaultControl(
+        title: "トラッキング喪失",
+        value: $model.trackingLostPercent
+      )
+    }
+  }
+}
+
+private struct NetworkConfiguration: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      ConfigurationSectionTitle("受信先")
+
+      LabeledContent("アドレス") {
+        TextField("Bind address", text: $model.networkBindHost)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 160)
+      }
+
+      LabeledContent("UDPポート") {
+        TextField("UDP port", text: $model.networkPortText)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 96)
+      }
+
+      Text("LANから受信する場合は0.0.0.0、Mac内だけで試す場合は127.0.0.1を使用します。")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+}
+
+private struct ConfigurationSectionTitle: View {
+  let title: String
+
+  init(_ title: String) {
+    self.title = title
+  }
+
+  var body: some View {
+    Text(title)
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+  }
+}
+
+private struct FaultControl: View {
+  let title: String
+  @Binding var value: Double
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text(title)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Spacer()
+        Text(
+          value.formatted(
+            .number.precision(.fractionLength(1))
+          ) + "%"
+        )
+        .font(.caption.monospacedDigit())
+      }
+
+      Slider(value: $value, in: 0...50, step: 0.5)
+    }
+  }
+}
+
+private struct ErrorBanner: View {
+  let message: String
+
+  var body: some View {
+    Label(message, systemImage: "exclamationmark.triangle.fill")
+      .font(.caption)
+      .foregroundStyle(.red)
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        Color.red.opacity(0.08),
+        in: RoundedRectangle(cornerRadius: 10)
+      )
   }
 }
 
 private struct TrackerTopDownView: View {
   let trackers: [TrackerDisplayState]
   let source: HubInputSource
+  let selectedTrackerID: String?
   private let visibleHalfRange = 2.0
 
   var body: some View {
@@ -380,39 +1320,45 @@ private struct TrackerTopDownView: View {
         draw(tracker, context: &context, size: size)
       }
     }
-    .background(
-      Color(nsColor: .controlBackgroundColor),
-      in: RoundedRectangle(cornerRadius: 8)
-    )
-    .overlay {
-      if trackers.isEmpty {
-        ContentUnavailableView(
-          "Trackerがありません",
-          systemImage: "dot.radiowaves.left.and.right",
-          description: Text(
-            source == .simulator
-              ? "左側の「開始」でSimulatorを起動してください。"
-              : "UDP受信を開始し、Bridgeまたはtest senderを起動してください。"
-          )
+    .background {
+      ZStack {
+        Color(nsColor: .controlBackgroundColor)
+        RadialGradient(
+          colors: [
+            Color.accentColor.opacity(0.09),
+            Color.clear,
+          ],
+          center: .topLeading,
+          startRadius: 0,
+          endRadius: 620
         )
       }
     }
   }
 
-  private func drawGrid(context: inout GraphicsContext, size: CGSize) {
+  private func drawGrid(
+    context: inout GraphicsContext,
+    size: CGSize
+  ) {
     let center = CGPoint(x: size.width / 2, y: size.height / 2)
     let scale = min(size.width, size.height) / (visibleHalfRange * 2)
     var grid = Path()
+
     for meter in -2...2 {
       let offset = CGFloat(meter) * scale
       grid.move(to: CGPoint(x: center.x + offset, y: 0))
-      grid.addLine(to: CGPoint(x: center.x + offset, y: size.height))
+      grid.addLine(
+        to: CGPoint(x: center.x + offset, y: size.height)
+      )
       grid.move(to: CGPoint(x: 0, y: center.y + offset))
-      grid.addLine(to: CGPoint(x: size.width, y: center.y + offset))
+      grid.addLine(
+        to: CGPoint(x: size.width, y: center.y + offset)
+      )
     }
+
     context.stroke(
       grid,
-      with: .color(.secondary.opacity(0.18)),
+      with: .color(.secondary.opacity(0.1)),
       lineWidth: 1
     )
 
@@ -423,7 +1369,7 @@ private struct TrackerTopDownView: View {
     axes.addLine(to: CGPoint(x: size.width, y: center.y))
     context.stroke(
       axes,
-      with: .color(.secondary.opacity(0.45)),
+      with: .color(.secondary.opacity(0.28)),
       lineWidth: 1.5
     )
   }
@@ -439,39 +1385,77 @@ private struct TrackerTopDownView: View {
       x: center.x + CGFloat(tracker.position.x) * scale,
       y: center.y + CGFloat(tracker.position.z) * scale
     )
+    let isSelected = selectedTrackerID == tracker.id
+    let diameter: CGFloat = isSelected ? 20 : 14
     let marker = CGRect(
-      x: point.x - 7,
-      y: point.y - 7,
-      width: 14,
-      height: 14
+      x: point.x - diameter / 2,
+      y: point.y - diameter / 2,
+      width: diameter,
+      height: diameter
     )
+
+    if isSelected {
+      let halo = marker.insetBy(dx: -7, dy: -7)
+      context.fill(
+        Path(ellipseIn: halo),
+        with: .color(Color.accentColor.opacity(0.15))
+      )
+    }
+
     context.fill(
       Path(ellipseIn: marker),
       with: .color(tracker.trackingState.displayColor)
     )
     context.stroke(
       Path(ellipseIn: marker),
-      with: .color(.white.opacity(0.85)),
-      lineWidth: 1.5
+      with: .color(.white.opacity(0.92)),
+      lineWidth: 2
     )
-    context.draw(
-      Text(tracker.role)
-        .font(.caption.bold())
-        .foregroundStyle(.primary),
-      at: CGPoint(x: point.x, y: point.y - 17),
-      anchor: .bottom
-    )
+    if isSelected || trackers.count <= 8 {
+      context.draw(
+        Text(tracker.role.isEmpty ? "未割当" : tracker.role)
+          .font(.caption.weight(isSelected ? .semibold : .medium))
+          .foregroundStyle(.primary),
+        at: CGPoint(x: point.x, y: point.y - diameter / 2 - 8),
+        anchor: .bottom
+      )
+    }
+  }
+}
+
+extension HubInputSource {
+  fileprivate var shortDisplayName: String {
+    switch self {
+    case .network: "UDP受信"
+    case .simulator: "Simulator"
+    }
+  }
+}
+
+extension HubAppMotionPreset {
+  fileprivate var systemImage: String {
+    switch self {
+    case .stationary: "pause.circle"
+    case .circle: "arrow.triangle.2.circlepath"
+    case .walk: "figure.walk"
+    case .jump: "arrow.up.circle"
+    case .random: "shuffle"
+    }
   }
 }
 
 extension TrackingState {
+  fileprivate var hasUsablePose: Bool {
+    self == .tracking || self == .simulated
+  }
+
   fileprivate var displayName: String {
     switch self {
-    case .unknown: "Unknown"
-    case .tracking: "Tracking"
-    case .lost: "Lost"
-    case .disconnected: "Disconnected"
-    case .simulated: "Simulated"
+    case .unknown: "不明"
+    case .tracking: "追跡中"
+    case .lost: "追跡喪失"
+    case .disconnected: "未接続"
+    case .simulated: "シミュレーション"
     }
   }
 
@@ -484,20 +1468,14 @@ extension TrackingState {
     case .simulated: .cyan
     }
   }
-}
 
-extension LabeledContent where Label == Text, Content == Text {
-  fileprivate init(
-    _ title: String,
-    value: Double,
-    format: FloatingPointFormatStyle<Double>,
-    suffix: String
-  ) {
-    self.init {
-      Text("\(value.formatted(format))\(suffix)")
-        .monospacedDigit()
-    } label: {
-      Text(title)
+  fileprivate var statusSymbol: String {
+    switch self {
+    case .unknown: "questionmark.circle.fill"
+    case .tracking: "checkmark.circle.fill"
+    case .lost: "exclamationmark.circle.fill"
+    case .disconnected: "xmark.circle.fill"
+    case .simulated: "waveform.circle.fill"
     }
   }
 }

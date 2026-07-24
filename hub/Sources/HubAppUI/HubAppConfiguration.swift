@@ -4,6 +4,9 @@ import HubSimulator
 public enum HubAppMotionPreset: String, CaseIterable, Identifiable, Sendable {
   case stationary
   case circle
+  case walk
+  case jump
+  case random
 
   public var id: Self { self }
 
@@ -11,6 +14,9 @@ public enum HubAppMotionPreset: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .stationary: "静止"
     case .circle: "円運動"
+    case .walk: "歩行"
+    case .jump: "ジャンプ"
+    case .random: "ランダム移動"
     }
   }
 }
@@ -80,12 +86,14 @@ public struct HubAppConfiguration: Equatable, Sendable {
 
   private func makeTrackers() -> [SimulatorTrackerConfiguration] {
     let center = Float(trackerCount - 1) / 2
+    // 16台でも既定の±2mプレビュー内へ収まるよう、全体幅を3m以内にする。
+    let spacing = min(0.4, 3 / Float(max(trackerCount - 1, 1)))
     return (0..<trackerCount).map { index in
       SimulatorTrackerConfiguration(
         trackerID: String(format: "sim://tracker/%03d", index + 1),
         role: role(for: index),
         position: Vector3(
-          x: (Float(index) - center) * 0.4,
+          x: (Float(index) - center) * spacing,
           y: 1,
           z: -1
         ),
@@ -112,6 +120,25 @@ public struct HubAppConfiguration: Equatable, Sendable {
         radiusMeters: 0.25,
         angularSpeedRadiansPerSecond: .pi / 2,
         phaseRadians: 2 * .pi * Float(index) / Float(trackerCount)
+      )
+    case .walk:
+      .walk(
+        strideLengthMeters: index == 0 ? 0.08 : 0.3,
+        stepHeightMeters: index == 0 ? 0.04 : 0.12,
+        cadenceHz: 1.6,
+        phaseRadians: index == 2 ? .pi : 0
+      )
+    case .jump:
+      .jump(
+        heightMeters: 0.35,
+        frequencyHz: 0.75,
+        phaseRadians: 0
+      )
+    case .random:
+      .random(
+        maximumOffsetMeters: Vector3(x: 0.4, y: 0.25, z: 0.4),
+        frequencyHz: 0.2,
+        seed: seed &+ UInt64(index)
       )
     }
   }

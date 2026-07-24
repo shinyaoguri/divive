@@ -9,7 +9,7 @@ Tracker frameを供給する開発用sourceです。GUIから独立した`HubSim
 - virtual Trackerの追加、更新、ID変更、削除
 - ID、role、base pose、source tracking stateの設定
 - 30 / 60 / 90 / 120Hz
-- `static`、`circle` motion
+- `static`、`circle`、`walk`、`jump`、`random` motion
 - seed付きframe loss
 - seed付きTracker単位のtracking lost
 - `AssembledPoseFrame`を`HubFrameSink`へ直接入力
@@ -31,6 +31,10 @@ simulation_time_seconds = frame_sequence / requested_rate_hz
 同じsource設定、Tracker設定、rate、seedなら、Macの負荷や開始時刻に関係なく同じ
 motionとfault列を生成します。TrackerはID順に評価し、dictionaryの走査順へ
 依存させません。
+
+`random`はframeごとのwhite noiseではなく、seedから生成した2つの正弦波を軸ごとに
+合成する滑らかな有界軌道です。fault用の乱数列からも独立しているため、
+tracking lost率を変えても同じseedとframe sequenceなら位置と速度は一致します。
 
 frame loss時もsequenceは進みますが、Hubへframeを渡しません。tracking lost時は
 frameを渡し、対象Trackerを次の状態にします。
@@ -60,6 +64,18 @@ swift run divive-simulator \
   --motion circle \
   --seed 42
 ```
+
+`--motion`には`static`、`circle`、`walk`、`jump`、`random`を指定できます。
+
+| preset | 既定動作 |
+| --- | --- |
+| `static` | base poseで静止 |
+| `circle` | X/-Z平面を円運動 |
+| `walk` | 腰を小さく、左右footを逆位相で前後・上下に歩行 |
+| `jump` | 全Trackerを同位相で滑らかに上下 |
+| `random` | seed付きの滑らかな3軸疑似random軌道 |
+
+これらのpresetは位置と線形速度を生成し、orientationはTrackerのbase poseを維持します。
 
 Control-Cまで継続する場合は`--frames 0`を指定するか、省略します。
 
@@ -110,12 +126,11 @@ case .dropped:
 
 `addTracker`、`updateTracker`、`removeTracker`でsceneを編集できます。更新時に新しい
 Tracker IDを指定するとrenameになります。空ID、重複ID、非有限pose、非正規化
-Quaternion、不正なcircle値は拒否します。
+Quaternion、各motionの負値・非有限値・0以下の周波数は拒否します。
 
 ## 今回含まないもの
 
 - GUIからの数値編集とscene永続化
-- walk、jump、random motion
 - delay、jitter、reordering、disconnect fault
 - fault scriptの保存・読み込み
 - WebSocket、Unityなど外部contentへの配信

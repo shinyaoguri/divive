@@ -39,6 +39,26 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     ageMilliseconds = Double(state.receiveAgeNS) / 1_000_000
     frameSequence = state.latest.frameSequence
   }
+
+  init(
+    id: String,
+    role: String,
+    position: Vector3,
+    trackingState: TrackingState,
+    trackingReason: TrackingReason,
+    liveness: HubLivenessState,
+    ageMilliseconds: Double,
+    frameSequence: UInt64
+  ) {
+    self.id = id
+    self.role = role
+    self.position = position
+    self.trackingState = trackingState
+    self.trackingReason = trackingReason
+    self.liveness = liveness
+    self.ageMilliseconds = ageMilliseconds
+    self.frameSequence = frameSequence
+  }
 }
 
 @MainActor
@@ -59,6 +79,7 @@ public final class HubAppModel: ObservableObject {
   @Published public private(set) var isRunning = false
   @Published public private(set) var observedRateHz = 0.0
   @Published public private(set) var trackers: [TrackerDisplayState] = []
+  @Published public private(set) var trackerHistories: [String: [TrackerHistorySample]] = [:]
   @Published public private(set) var errorMessage: String?
 
   @Published public private(set) var attemptedFrames: UInt64 = 0
@@ -79,8 +100,8 @@ public final class HubAppModel: ObservableObject {
 
   private let simulatorRuntime: SimulatorRuntime
   private let networkRuntime: NetworkRuntime
-  private var previousSample:
-    (source: HubInputSource, monotonicNS: UInt64, generation: UInt64)?
+  private var previousSample: (source: HubInputSource, monotonicNS: UInt64, generation: UInt64)?
+  private var trackerHistoryBuffer = TrackerHistoryBuffer()
 
   public init(
     simulatorRuntime: SimulatorRuntime = SimulatorRuntime(),
@@ -95,10 +116,10 @@ public final class HubAppModel: ObservableObject {
   }
 
   public var statusTitle: String {
-    guard let activeSource else { return "Source停止中" }
+    guard let activeSource else { return "停止中" }
     return switch (activeSource, isRunning) {
     case (.network, true): "UDP受信中"
-    case (.network, false): "UDP受信停止中"
+    case (.network, false): "受信停止中"
     case (.simulator, true): "Simulator実行中"
     case (.simulator, false): "Simulator停止中"
     }
@@ -160,6 +181,8 @@ public final class HubAppModel: ObservableObject {
       }
       activeSource = selectedSource
       previousSample = nil
+      trackerHistoryBuffer.reset()
+      publish(trackerHistoryBuffer.samplesByTrackerID, to: \.trackerHistories)
       errorMessage = nil
       await refresh()
     } catch {
@@ -186,7 +209,7 @@ public final class HubAppModel: ObservableObject {
     }
   }
 
-  /// SwiftUIの`.task`から呼び、画面表示中だけlatest stateを10Hzで読む。
+  /// メニューバーの`.task`から呼び、アプリ実行中はlatest stateを10Hzで読む。
   public func refreshUntilCancelled() async {
     while !Task.isCancelled {
       await refresh()
@@ -208,6 +231,12 @@ public final class HubAppModel: ObservableObject {
     case .network:
       update(from: await networkRuntime.snapshot())
     }
+  }
+
+  public func trackerHistory(
+    for trackerID: String
+  ) -> [TrackerHistorySample] {
+    trackerHistories[trackerID, default: []]
   }
 
   private func simulatorConfiguration() throws -> HubAppConfiguration {
@@ -245,9 +274,11 @@ public final class HubAppModel: ObservableObject {
     publish(snapshot.metrics.emittedFrames, to: \.emittedFrames)
     publish(snapshot.metrics.droppedFrames, to: \.droppedFrames)
     publish(snapshot.metrics.missedDeadlines, to: \.missedDeadlines)
-    publish(
+    updateTrackers(
       snapshot.hubState.trackers.map(TrackerDisplayState.init),
-      to: \.trackers
+      sampledAtNS: snapshot.monotonicNS,
+      cumulativeFrameLoss: snapshot.metrics.droppedFrames,
+      cumulativeDeliveredFrames: snapshot.metrics.emittedFrames
     )
     if let runtimeError = snapshot.metrics.lastError {
       errorMessage = "Simulatorが停止しました: \(runtimeError)"
@@ -278,9 +309,31 @@ public final class HubAppModel: ObservableObject {
       receiver.lastProcessingTimeNS / 1_000,
       to: \.lastProcessingMicroseconds
     )
-    publish(
+    updateTrackers(
       snapshot.hubState.trackers.map(TrackerDisplayState.init),
-      to: \.trackers
+      sampledAtNS: snapshot.monotonicNS,
+      cumulativeFrameLoss: receiver.missingFrames,
+      cumulativeDeliveredFrames:
+        snapshot.hubState.stateStatistics.appliedFrames
+    )
+  }
+
+  private func updateTrackers(
+    _ trackers: [TrackerDisplayState],
+    sampledAtNS: UInt64,
+    cumulativeFrameLoss: UInt64,
+    cumulativeDeliveredFrames: UInt64
+  ) {
+    trackerHistoryBuffer.record(
+      trackers: trackers,
+      sampledAtNS: sampledAtNS,
+      cumulativeFrameLoss: cumulativeFrameLoss,
+      cumulativeDeliveredFrames: cumulativeDeliveredFrames
+    )
+    publish(trackers, to: \.trackers)
+    publish(
+      trackerHistoryBuffer.samplesByTrackerID,
+      to: \.trackerHistories
     )
   }
 

@@ -7,6 +7,9 @@ import HubSimulator
 private enum MotionOption: String {
   case stationary = "static"
   case circle
+  case walk
+  case jump
+  case random
 }
 
 private struct Options {
@@ -128,7 +131,8 @@ private enum OptionError: Error, CustomStringConvertible {
     case .invalidRate: "--rate は30、60、90、120のいずれかです"
     case .invalidFrames: "--frames は0以上の整数で指定してください"
     case .invalidSeed: "--seed は0以上の整数で指定してください"
-    case .invalidMotion: "--motion はstaticまたはcircleです"
+    case .invalidMotion:
+      "--motion はstatic、circle、walk、jump、randomのいずれかです"
     case .invalidProbability(let option):
       "\(option) は0〜1の小数で指定してください"
     case .unknownArgument(let argument): "不明な引数です: \(argument)"
@@ -144,8 +148,9 @@ private func printUsage() {
       --trackers COUNT       Tracker数。既定値: 3、最大: 64
       --rate HZ              30 / 60 / 90 / 120。既定値: 90
       --frames COUNT         生成frame数。0はControl-Cまで継続。既定値: 0
-      --seed SEED            障害注入seed。既定値: 1
-      --motion PRESET        static / circle。既定値: static
+      --seed SEED            motionと障害注入の再現用seed。既定値: 1
+      --motion PRESET        static / circle / walk / jump / random
+                             既定値: static
       --frame-loss RATE      frame drop確率。0〜1、既定値: 0
       --tracking-lost RATE   Trackerごとのlost確率。0〜1、既定値: 0
       --print-pose           emitted frameごとの姿勢を表示
@@ -202,6 +207,25 @@ private func makeTrackers(_ options: Options) -> [SimulatorTrackerConfiguration]
           angularSpeedRadiansPerSecond: .pi / 2,
           phaseRadians: 2 * .pi * Float(index)
             / Float(max(options.trackerCount, 1))
+        )
+      case .walk:
+        .walk(
+          strideLengthMeters: index == 0 ? 0.08 : 0.3,
+          stepHeightMeters: index == 0 ? 0.04 : 0.12,
+          cadenceHz: 1.6,
+          phaseRadians: index == 2 ? .pi : 0
+        )
+      case .jump:
+        .jump(
+          heightMeters: 0.35,
+          frequencyHz: 0.75,
+          phaseRadians: 0
+        )
+      case .random:
+        .random(
+          maximumOffsetMeters: Vector3(x: 0.4, y: 0.25, z: 0.4),
+          frequencyHz: 0.2,
+          seed: options.seed &+ UInt64(index)
         )
       }
     return SimulatorTrackerConfiguration(
@@ -266,7 +290,8 @@ do {
 
   print(
     "divive-simulatorを開始しました: rate=\(options.rate.rawValue)Hz "
-      + "trackers=\(options.trackerCount) seed=\(options.seed)"
+      + "trackers=\(options.trackerCount) motion=\(options.motion.rawValue) "
+      + "seed=\(options.seed)"
   )
   print("終了するにはControl-Cを押してください")
 

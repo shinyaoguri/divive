@@ -30,7 +30,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] HubCoreの複数batch再構成とlatest Tracker state
 - [x] receive ageに基づくlost / disconnected評価
 - [x] deterministic Headless Simulator coreとCLI
-- [x] static / circle、30 / 60 / 90 / 120Hz
+- [x] static / circle / walk / jump / random、30 / 60 / 90 / 120Hz
 - [x] seed付きframe loss / tracking lost
 - [x] SwiftUI Simulator GUIの開始・停止、上面図、Tracker一覧、基本metrics
 - [x] SwiftUI GUIのUDP / Simulator source切替とNetwork metrics
@@ -294,7 +294,7 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] deterministic seedと固定step time
 - [x] 30 / 60 / 90 / 120Hz
 - [x] static、circle
-- [ ] walk、jump、random
+- [x] walk、jump、random
 - [x] frame loss、tracking lost
 - [ ] delay、jitter、reordering、disconnect
 - [x] `HubFrameSink`による実機正規化後と同じHub input interface

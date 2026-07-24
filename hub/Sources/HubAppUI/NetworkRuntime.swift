@@ -91,15 +91,16 @@ public actor NetworkRuntime {
     let now = DispatchTime.now().uptimeNanoseconds
     let currentReceiver = receiver
     let statistics = currentReceiver?.statistics() ?? lastStatistics
+    let ingressSnapshot = ingress.snapshot(atMonotonicNS: now)
     return NetworkRuntimeSnapshot(
       monotonicNS: now,
       metrics: NetworkRuntimeMetrics(
         isRunning: currentReceiver?.isActive() ?? false,
         boundEndpoint: boundEndpoint?.description,
-        lastRemoteAddress: ingress.lastRemoteAddress(),
+        lastRemoteAddress: ingressSnapshot.remoteAddress,
         receiver: statistics
       ),
-      hubState: ingress.store.evaluatedSnapshot(atMonotonicNS: now)
+      hubState: ingressSnapshot.hubState
     )
   }
 
@@ -113,29 +114,45 @@ public actor NetworkRuntime {
   }
 }
 
+private struct NetworkIngressSnapshot {
+  let remoteAddress: String?
+  let hubState: EvaluatedHubStateSnapshot
+}
+
 /// NIO event loopとGUI snapshotから共有する最小のthread-safe ingress。
 private final class NetworkIngress: @unchecked Sendable {
-  let store = HubStateStore()
-
   private let lock = NSLock()
+  private let store = HubStateStore()
   private var remoteAddress: String?
 
   func receive(_ received: ReceivedPosePacket) {
-    _ = store.ingest(
-      received.packet,
-      receivedMonotonicNS: received.receivedMonotonicNS
-    )
+    // 送信元と姿勢を同じ受信時点として公開し、snapshotへ中間状態を見せない。
     lock.withLock {
+      _ = store.ingest(
+        received.packet,
+        receivedMonotonicNS: received.receivedMonotonicNS
+      )
       remoteAddress = received.remoteAddress
     }
   }
 
-  func lastRemoteAddress() -> String? {
-    lock.withLock { remoteAddress }
+  func snapshot(
+    atMonotonicNS monotonicNS: UInt64
+  ) -> NetworkIngressSnapshot {
+    lock.withLock {
+      NetworkIngressSnapshot(
+        remoteAddress: remoteAddress,
+        hubState: store.evaluatedSnapshot(
+          atMonotonicNS: monotonicNS
+        )
+      )
+    }
   }
 
   func flushPendingFrames() {
-    _ = store.flushPendingFrames()
+    lock.withLock {
+      _ = store.flushPendingFrames()
+    }
   }
 }
 
