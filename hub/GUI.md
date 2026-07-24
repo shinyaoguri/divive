@@ -18,6 +18,19 @@ swift run divive-hub-app
 「開始」または「受信開始」を押します。停止後も画面のsnapshot更新は続くため、
 既定では約250ms後に`Lost`、約2秒後に`Disconnected`へ変化することを確認できます。
 
+## 画面構成
+
+日常的な操作と診断情報を同じ強さで並べず、次の順で情報を表示します。
+
+- サイドバー: Source選択、基本設定、開始・停止
+- 詳細設定: seed、frame loss、tracking lost。通常は折りたたむ
+- メイン画面: 空間プレビュー、Tracker一覧
+- 上部ステータス: Hub更新レートとTracker数
+- 診断情報: packetやSimulatorの詳細値。必要なときだけ展開する
+
+空間とTracker状態を常に見える主情報とし、障害注入と通信診断は通常操作を妨げない
+位置へ分離しています。
+
 ## Simulator
 
 - Tracker数: 1〜16台
