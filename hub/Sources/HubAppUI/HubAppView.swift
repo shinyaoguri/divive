@@ -1,3 +1,4 @@
+import Charts
 import HubProtocol
 import HubSimulator
 import SwiftUI
@@ -484,7 +485,11 @@ private struct TrackerInspector: View {
         Divider()
 
         if let selectedTracker {
-          SelectedTrackerPanel(tracker: selectedTracker)
+          SelectedTrackerPanel(
+            tracker: selectedTracker,
+            history: model.trackerHistory(for: selectedTracker.id),
+            usesCompactLayout: model.trackers.count > 8
+          )
         }
       }
 
@@ -528,16 +533,26 @@ private struct TrackerGrid: View {
   let selectedTrackerID: String?
   let onSelect: (String) -> Void
 
-  private let columns = [
-    GridItem(.flexible(), spacing: 7),
-    GridItem(.flexible(), spacing: 7),
-  ]
+  private var usesCompactRows: Bool {
+    trackers.count > 8
+  }
+
+  private var rowSpacing: CGFloat {
+    usesCompactRows ? 4 : 7
+  }
+
+  private var columns: [GridItem] {
+    [
+      GridItem(.flexible(), spacing: rowSpacing),
+      GridItem(.flexible(), spacing: rowSpacing),
+    ]
+  }
 
   var body: some View {
     LazyVGrid(
       columns: columns,
       alignment: .leading,
-      spacing: 7
+      spacing: rowSpacing
     ) {
       ForEach(trackers.prefix(16)) { tracker in
         Button {
@@ -545,7 +560,8 @@ private struct TrackerGrid: View {
         } label: {
           TrackerTile(
             tracker: tracker,
-            isSelected: selectedTrackerID == tracker.id
+            isSelected: selectedTrackerID == tracker.id,
+            usesCompactRows: usesCompactRows
           )
         }
         .buttonStyle(.plain)
@@ -558,6 +574,7 @@ private struct TrackerGrid: View {
 private struct TrackerTile: View {
   let tracker: TrackerDisplayState
   let isSelected: Bool
+  let usesCompactRows: Bool
 
   var body: some View {
     HStack(spacing: 7) {
@@ -581,7 +598,10 @@ private struct TrackerTile: View {
         )
     }
     .padding(.horizontal, 9)
-    .frame(maxWidth: .infinity, minHeight: 36)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: usesCompactRows ? 32 : 36
+    )
     .contentShape(RoundedRectangle(cornerRadius: 9))
     .background(
       isSelected
@@ -602,6 +622,8 @@ private struct TrackerTile: View {
 
 private struct SelectedTrackerPanel: View {
   let tracker: TrackerDisplayState
+  let history: [TrackerHistorySample]
+  let usesCompactLayout: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 9) {
@@ -633,6 +655,11 @@ private struct SelectedTrackerPanel: View {
         PositionValue(axis: "Z", value: tracker.position.z)
       }
 
+      TrackerPositionHistory(
+        history: history,
+        height: usesCompactLayout ? 62 : 82
+      )
+
       LabeledContent("最終更新") {
         Text(String(format: "%.0f ms前", tracker.ageMilliseconds))
           .monospacedDigit()
@@ -641,6 +668,197 @@ private struct SelectedTrackerPanel: View {
       .foregroundStyle(.secondary)
     }
     .accessibilityElement(children: .contain)
+  }
+}
+
+private enum TrackerHistoryAxis: String, CaseIterable, Identifiable {
+  case x = "X"
+  case y = "Y"
+  case z = "Z"
+
+  var id: Self { self }
+
+  var color: Color {
+    switch self {
+    case .x: .blue
+    case .y: .green
+    case .z: .orange
+    }
+  }
+
+  func value(in position: Vector3) -> Double {
+    switch self {
+    case .x: Double(position.x)
+    case .y: Double(position.y)
+    case .z: Double(position.z)
+    }
+  }
+}
+
+private struct TrackerPositionHistory: View {
+  let history: [TrackerHistorySample]
+  let height: CGFloat
+  @State private var selectedAxis: TrackerHistoryAxis = .x
+
+  private let visibleDurationSeconds = 6.0
+
+  private var visibleSamples: [TrackerHistorySample] {
+    guard let latestTimestamp = history.last?.sampledAtNS else { return [] }
+    let durationNS = UInt64(visibleDurationSeconds * 1_000_000_000)
+    let lowerBound =
+      latestTimestamp > durationNS
+      ? latestTimestamp - durationNS
+      : 0
+    return history.filter { $0.sampledAtNS >= lowerBound }
+  }
+
+  private var latestTimestamp: UInt64 {
+    visibleSamples.last?.sampledAtNS ?? 0
+  }
+
+  private var yDomain: ClosedRange<Double> {
+    let values = visibleSamples.map {
+      selectedAxis.value(in: $0.position)
+    }
+    guard let minimum = values.min(), let maximum = values.max() else {
+      return -0.01...0.01
+    }
+    let span = maximum - minimum
+    let padding = max(span * 0.12, 0.01)
+    return (minimum - padding)...(maximum + padding)
+  }
+
+  private var accessibilityValue: String {
+    let values = visibleSamples.map {
+      selectedAxis.value(in: $0.position)
+    }
+    guard let current = values.last,
+      let minimum = values.min(),
+      let maximum = values.max()
+    else {
+      return "履歴はまだありません"
+    }
+    return String(
+      format: "現在 %.3fメートル、最小 %.3f、最大 %.3f",
+      current,
+      minimum,
+      maximum
+    )
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        Text("位置の推移")
+          .font(.caption.weight(.semibold))
+
+        Text("直近6秒")
+          .font(.caption2)
+          .foregroundStyle(.tertiary)
+
+        Spacer()
+
+        Picker("表示軸", selection: $selectedAxis) {
+          ForEach(TrackerHistoryAxis.allCases) { axis in
+            Text(axis.rawValue).tag(axis)
+          }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 104)
+      }
+
+      if visibleSamples.count < 2 {
+        Text("動きを取得するとグラフが表示されます")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, minHeight: 70)
+          .background(
+            Color.primary.opacity(0.035),
+            in: RoundedRectangle(cornerRadius: 8)
+          )
+      } else {
+        Chart(visibleSamples) { sample in
+          let ageNanoseconds = latestTimestamp - sample.sampledAtNS
+          let seconds = -Double(ageNanoseconds) / 1_000_000_000
+
+          LineMark(
+            x: .value("時間", seconds),
+            y: .value(
+              "\(selectedAxis.rawValue)座標",
+              selectedAxis.value(in: sample.position)
+            )
+          )
+          .foregroundStyle(selectedAxis.color)
+          .lineStyle(
+            StrokeStyle(
+              lineWidth: 2,
+              lineCap: .round,
+              lineJoin: .round
+            )
+          )
+
+          if !sample.trackingState.hasUsablePose {
+            PointMark(
+              x: .value("時間", seconds),
+              y: .value(
+                "\(selectedAxis.rawValue)座標",
+                selectedAxis.value(in: sample.position)
+              )
+            )
+            .foregroundStyle(.red)
+            .symbolSize(24)
+          }
+        }
+        .chartXScale(domain: -visibleDurationSeconds...0)
+        .chartYScale(domain: yDomain)
+        .chartXAxis {
+          AxisMarks(values: [-visibleDurationSeconds, 0]) { value in
+            AxisGridLine()
+              .foregroundStyle(Color.secondary.opacity(0.1))
+            AxisValueLabel {
+              if let seconds = value.as(Double.self) {
+                Text(seconds == 0 ? "現在" : "6秒前")
+              }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+          }
+        }
+        .chartYAxis {
+          AxisMarks(
+            position: .leading,
+            values: .automatic(desiredCount: 3)
+          ) { value in
+            AxisGridLine()
+              .foregroundStyle(Color.secondary.opacity(0.1))
+            AxisValueLabel {
+              if let number = value.as(Double.self) {
+                Text(
+                  number.formatted(
+                    .number.precision(.fractionLength(2))
+                  )
+                )
+              }
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.tertiary)
+          }
+        }
+        .chartPlotStyle { plotArea in
+          plotArea
+            .background(Color.primary.opacity(0.025))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .frame(height: height)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+          "\(selectedAxis.rawValue)座標の直近6秒の推移"
+        )
+        .accessibilityValue(accessibilityValue)
+      }
+    }
+    .accessibilityIdentifier("tracker-position-history")
   }
 }
 
@@ -1152,6 +1370,10 @@ extension HubAppMotionPreset {
 }
 
 extension TrackingState {
+  fileprivate var hasUsablePose: Bool {
+    self == .tracking || self == .simulated
+  }
+
   fileprivate var displayName: String {
     switch self {
     case .unknown: "不明"
