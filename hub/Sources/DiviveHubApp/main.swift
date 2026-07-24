@@ -7,6 +7,7 @@ struct DiviveHubApplication: App {
     WindowGroup("Divive Hub") {
       HubAppView()
     }
-    .defaultSize(width: 1_180, height: 760)
+    .defaultSize(width: 1_240, height: 760)
+    .windowResizability(.contentMinSize)
   }
 }

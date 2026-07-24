@@ -4,421 +4,142 @@ import SwiftUI
 
 public struct HubAppView: View {
   @StateObject private var model: HubAppModel
+  @State private var showsConfiguration = false
+  @State private var showsDiagnostics = false
 
   public init() {
     _model = StateObject(wrappedValue: HubAppModel())
   }
 
   public var body: some View {
-    NavigationSplitView {
-      SourceSidebarView(model: model)
-        .navigationSplitViewColumnWidth(
-          min: 250,
-          ideal: 280,
-          max: 320
-        )
-    } detail: {
+    NavigationStack {
       HubDashboardView(model: model)
+        .navigationTitle("Divive Hub")
+        .toolbar {
+          ToolbarItem(placement: .navigation) {
+            SourcePicker(model: model)
+          }
+
+          ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+              showsConfiguration.toggle()
+            } label: {
+              Label("設定", systemImage: "slider.horizontal.3")
+            }
+            .help("入力とSimulatorの設定")
+            .accessibilityIdentifier("configuration-button")
+            .popover(
+              isPresented: $showsConfiguration,
+              arrowEdge: .top
+            ) {
+              SourceConfigurationPanel(model: model)
+            }
+            .diviveGlassButton()
+
+            Button {
+              showsDiagnostics.toggle()
+            } label: {
+              Label("診断", systemImage: "waveform.path.ecg")
+            }
+            .help("通信とSimulatorの診断情報")
+            .accessibilityIdentifier("diagnostics-button")
+            .popover(
+              isPresented: $showsDiagnostics,
+              arrowEdge: .top
+            ) {
+              DiagnosticsPopover(model: model)
+            }
+            .diviveGlassButton()
+
+            StartSourceButton(model: model)
+
+            if model.isRunning {
+              StopSourceButton(model: model)
+            }
+          }
+        }
     }
-    .navigationSplitViewStyle(.balanced)
-    .frame(minWidth: 1_000, minHeight: 680)
+    .frame(minWidth: 1_120, minHeight: 700)
     .task {
       await model.refreshUntilCancelled()
     }
   }
 }
 
-private struct SourceSidebarView: View {
+private struct SourcePicker: View {
   @ObservedObject var model: HubAppModel
-  @State private var showsAdvancedSettings = false
 
   var body: some View {
-    VStack(spacing: 0) {
-      SidebarHeader(model: model)
-
-      Divider()
-
-      ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
-          SourceSelection(model: model)
-
-          if model.selectedSource == .simulator {
-            SimulatorSettings(
-              model: model,
-              showsAdvancedSettings: $showsAdvancedSettings
-            )
-          } else {
-            NetworkSettings(model: model)
-          }
-
-          if let errorMessage = model.errorMessage {
-            ErrorBanner(message: errorMessage)
-          }
-        }
-        .padding(16)
+    Picker("入力", selection: $model.selectedSource) {
+      ForEach(HubInputSource.allCases) { source in
+        Text(source.displayName)
+          .tag(source)
       }
-
-      Divider()
-
-      SourceActions(model: model)
-        .padding(16)
     }
-    .background(Color(nsColor: .windowBackgroundColor))
-    .navigationTitle("Divive Hub")
+    .pickerStyle(.menu)
+    .frame(width: 150)
+    .accessibilityIdentifier("source-picker")
   }
 }
 
-private struct SidebarHeader: View {
+private struct StartSourceButton: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 12) {
-        Image(systemName: "scope")
-          .font(.title2.weight(.semibold))
-          .foregroundStyle(.white)
-          .frame(width: 38, height: 38)
-          .background(.tint, in: RoundedRectangle(cornerRadius: 11))
-
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Divive Hub")
-            .font(.headline)
-          Text("Tracker workspace")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-      }
-
-      StatusPill(
-        title: model.statusTitle,
-        isActive: model.isRunning
+    Button {
+      Task { await model.startSelectedSource() }
+    } label: {
+      Label(
+        model.startButtonTitle,
+        systemImage: model.isRunning
+          ? "arrow.clockwise"
+          : "play.fill"
       )
-
-      if model.activeSource == .network,
-        let endpoint = model.boundEndpoint
-      {
-        Label(endpoint, systemImage: "network")
-          .font(.caption.monospaced())
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
     }
-    .padding(18)
-  }
-}
-
-private struct StatusPill: View {
-  let title: String
-  let isActive: Bool
-
-  var body: some View {
-    HStack(spacing: 7) {
-      Circle()
-        .fill(isActive ? Color.green : Color.secondary)
-        .frame(width: 7, height: 7)
-      Text(title)
-        .font(.caption.weight(.medium))
-    }
-    .foregroundStyle(isActive ? .primary : .secondary)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .background(
-      isActive ? Color.green.opacity(0.12) : Color.secondary.opacity(0.1),
-      in: Capsule()
+    .help(
+      model.isRunning
+        ? "現在の設定を反映して再起動"
+        : "選択した入力を開始"
     )
-    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("source-start-button")
+    .diviveGlassProminentButton()
   }
 }
 
-private struct SourceSelection: View {
+private struct StopSourceButton: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      SidebarSectionTitle("入力")
-
-      Picker("入力Source", selection: $model.selectedSource) {
-        ForEach(HubInputSource.allCases) { source in
-          Label(source.displayName, systemImage: source.systemImage)
-            .tag(source)
-        }
-      }
-      .labelsHidden()
-      .pickerStyle(.segmented)
-      .accessibilityIdentifier("source-picker")
+    Button(role: .destructive) {
+      Task { await model.stopActiveSource() }
+    } label: {
+      Label("停止", systemImage: "stop.fill")
+        .labelStyle(.iconOnly)
     }
-  }
-}
-
-private struct SimulatorSettings: View {
-  @ObservedObject var model: HubAppModel
-  @Binding var showsAdvancedSettings: Bool
-
-  var body: some View {
-    SettingsSurface(
-      title: "シーン",
-      systemImage: "sparkles"
-    ) {
-      LabeledContent {
-        Stepper(
-          "\(model.trackerCount) 台",
-          value: $model.trackerCount,
-          in: 1...16
-        )
-        .fixedSize()
-      } label: {
-        Label("Tracker", systemImage: "dot.radiowaves.left.and.right")
-      }
-
-      SettingsDivider()
-
-      LabeledContent {
-        Picker("Motion", selection: $model.motion) {
-          ForEach(HubAppMotionPreset.allCases) { motion in
-            Label(motion.displayName, systemImage: motion.systemImage)
-              .tag(motion)
-          }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 130, alignment: .trailing)
-        .accessibilityIdentifier("motion-picker")
-      } label: {
-        Label("Motion", systemImage: model.motion.systemImage)
-      }
-
-      SettingsDivider()
-
-      LabeledContent {
-        Picker("更新頻度", selection: $model.rate) {
-          ForEach(SimulatorRate.allCases, id: \.rawValue) { rate in
-            Text("\(rate.rawValue) Hz").tag(rate)
-          }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 90, alignment: .trailing)
-      } label: {
-        Label("更新頻度", systemImage: "waveform.path.ecg")
-      }
-    }
-
-    SettingsSurface {
-      DisclosureGroup(
-        isExpanded: $showsAdvancedSettings
-      ) {
-        VStack(spacing: 14) {
-          LabeledContent {
-            TextField("Seed", text: $model.seedText)
-              .textFieldStyle(.roundedBorder)
-              .multilineTextAlignment(.trailing)
-              .frame(width: 88)
-          } label: {
-            Label("再現用Seed", systemImage: "number")
-          }
-
-          FaultControl(
-            title: "Frame loss",
-            value: $model.frameLossPercent
-          )
-
-          FaultControl(
-            title: "Tracking lost",
-            value: $model.trackingLostPercent
-          )
-        }
-        .padding(.top, 14)
-      } label: {
-        Label("詳細設定", systemImage: "slider.horizontal.3")
-          .font(.subheadline.weight(.medium))
-      }
-    }
-  }
-}
-
-private struct FaultControl: View {
-  let title: String
-  @Binding var value: Double
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 7) {
-      HStack {
-        Text(title)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Spacer()
-        Text(
-          value.formatted(
-            .number.precision(.fractionLength(1))
-          ) + "%"
-        )
-        .font(.caption.monospacedDigit())
-      }
-      Slider(value: $value, in: 0...50, step: 0.5)
-    }
-  }
-}
-
-private struct NetworkSettings: View {
-  @ObservedObject var model: HubAppModel
-
-  var body: some View {
-    SettingsSurface(
-      title: "UDP Listener",
-      systemImage: "network"
-    ) {
-      LabeledContent {
-        TextField("Bind address", text: $model.networkBindHost)
-          .textFieldStyle(.roundedBorder)
-          .multilineTextAlignment(.trailing)
-          .frame(width: 125)
-      } label: {
-        Text("Address")
-      }
-
-      SettingsDivider()
-
-      LabeledContent {
-        TextField("UDP port", text: $model.networkPortText)
-          .textFieldStyle(.roundedBorder)
-          .multilineTextAlignment(.trailing)
-          .frame(width: 80)
-      } label: {
-        Text("Port")
-      }
-
-      Text("LAN受信は0.0.0.0、Mac内の試験は127.0.0.1")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-  }
-}
-
-private struct SourceActions: View {
-  @ObservedObject var model: HubAppModel
-
-  var body: some View {
-    HStack(spacing: 8) {
-      Button {
-        Task { await model.startSelectedSource() }
-      } label: {
-        Label(
-          model.startButtonTitle,
-          systemImage: model.isRunning
-            ? "arrow.clockwise"
-            : "play.fill"
-        )
-        .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(.borderedProminent)
-      .controlSize(.large)
-      .accessibilityIdentifier("source-start-button")
-
-      if model.isRunning {
-        Button(role: .destructive) {
-          Task { await model.stopActiveSource() }
-        } label: {
-          Image(systemName: "stop.fill")
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.large)
-        .help("停止")
-        .accessibilityLabel("停止")
-        .accessibilityIdentifier("source-stop-button")
-      }
-    }
-  }
-}
-
-private struct ErrorBanner: View {
-  let message: String
-
-  var body: some View {
-    Label(message, systemImage: "exclamationmark.triangle.fill")
-      .font(.caption)
-      .foregroundStyle(.red)
-      .padding(12)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-  }
-}
-
-private struct SidebarSectionTitle: View {
-  let title: String
-
-  init(_ title: String) {
-    self.title = title
-  }
-
-  var body: some View {
-    Text(title.uppercased())
-      .font(.caption2.weight(.semibold))
-      .foregroundStyle(.secondary)
-      .tracking(0.8)
-  }
-}
-
-private struct SettingsSurface<Content: View>: View {
-  let title: String?
-  let systemImage: String?
-  let content: Content
-
-  init(
-    title: String? = nil,
-    systemImage: String? = nil,
-    @ViewBuilder content: () -> Content
-  ) {
-    self.title = title
-    self.systemImage = systemImage
-    self.content = content()
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 13) {
-      if let title, let systemImage {
-        Label(title, systemImage: systemImage)
-          .font(.subheadline.weight(.semibold))
-      }
-      content
-    }
-    .padding(14)
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-    .overlay {
-      RoundedRectangle(cornerRadius: 14)
-        .stroke(.quaternary, lineWidth: 1)
-    }
-  }
-}
-
-private struct SettingsDivider: View {
-  var body: some View {
-    Divider()
-      .opacity(0.55)
+    .help("入力を停止")
+    .accessibilityIdentifier("source-stop-button")
+    .diviveGlassButton()
   }
 }
 
 private struct HubDashboardView: View {
   @ObservedObject var model: HubAppModel
-  @State private var showsDiagnostics = false
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
-        DashboardHeader(model: model)
-        HubSummaryBar(model: model)
+    VStack(alignment: .leading, spacing: 16) {
+      DashboardHeader(model: model)
+
+      HStack(spacing: 16) {
         SpatialPreviewPanel(model: model)
-        TrackerListPanel(model: model)
-        DiagnosticsPanel(
-          model: model,
-          isExpanded: $showsDiagnostics
-        )
+          .layoutPriority(1)
+
+        TrackerGridPanel(model: model)
+          .frame(width: 440)
       }
-      .padding(.horizontal, 24)
-      .padding(.top, 48)
-      .padding(.bottom, 24)
     }
+    .padding(.horizontal, 20)
+    .padding(.top, 16)
+    .padding(.bottom, 20)
     .background(Color(nsColor: .windowBackgroundColor))
   }
 }
@@ -427,72 +148,66 @@ private struct DashboardHeader: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
-    HStack(alignment: .center, spacing: 16) {
+    HStack(spacing: 20) {
       VStack(alignment: .leading, spacing: 4) {
-        Text("Tracker Space")
-          .font(.largeTitle.weight(.semibold))
-        Text(model.dashboardSubtitle)
+        HStack(spacing: 9) {
+          Image(systemName: "scope")
+            .font(.title2.weight(.semibold))
+            .foregroundStyle(.tint)
+
+          Text("Tracker空間")
+            .font(.title2.weight(.semibold))
+        }
+
+        Text(headerSubtitle)
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(
+            model.errorMessage == nil ? .secondary : Color.red
+          )
           .lineLimit(1)
       }
 
-      Spacer()
+      Spacer(minLength: 16)
 
-      Label(
-        model.displayedSource.displayName,
-        systemImage: model.displayedSource.systemImage
+      HeaderMetric(
+        title: "更新レート",
+        value: String(format: "%.1f Hz", model.observedRateHz),
+        systemImage: "waveform.path"
       )
-      .font(.subheadline.weight(.medium))
-      .padding(.horizontal, 12)
-      .padding(.vertical, 7)
-      .background(.regularMaterial, in: Capsule())
+
+      Divider()
+        .frame(height: 34)
+
+      HeaderMetric(
+        title: "Tracker",
+        value: "\(model.trackers.count) 台",
+        systemImage: "dot.radiowaves.left.and.right"
+      )
+
+      StatusBadge(
+        title: model.statusTitle,
+        isActive: model.isRunning
+      )
     }
+    .frame(height: 54)
+  }
+
+  private var headerSubtitle: String {
+    model.errorMessage ?? model.dashboardSubtitle
   }
 }
 
-private struct HubSummaryBar: View {
-  @ObservedObject var model: HubAppModel
-
-  var body: some View {
-    DashboardSurface {
-      HStack(spacing: 18) {
-        SummaryValue(
-          title: "更新レート",
-          value: String(format: "%.1f Hz", model.observedRateHz),
-          systemImage: "waveform.path.ecg"
-        )
-
-        Divider()
-          .frame(height: 32)
-
-        SummaryValue(
-          title: "Tracker",
-          value: "\(model.trackers.count) 台",
-          systemImage: "dot.radiowaves.left.and.right"
-        )
-
-        Spacer()
-
-        Text(model.summaryText)
-          .font(.caption.monospacedDigit())
-          .foregroundStyle(.secondary)
-      }
-    }
-  }
-}
-
-private struct SummaryValue: View {
+private struct HeaderMetric: View {
   let title: String
   let value: String
   let systemImage: String
 
   var body: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: 9) {
       Image(systemName: systemImage)
-        .font(.title3)
         .foregroundStyle(.tint)
-        .frame(width: 26)
+        .frame(width: 20)
+
       VStack(alignment: .leading, spacing: 1) {
         Text(title)
           .font(.caption)
@@ -501,6 +216,34 @@ private struct SummaryValue: View {
           .font(.headline.monospacedDigit())
       }
     }
+    .accessibilityElement(children: .combine)
+  }
+}
+
+private struct StatusBadge: View {
+  let title: String
+  let isActive: Bool
+
+  var body: some View {
+    HStack(spacing: 7) {
+      Circle()
+        .fill(isActive ? Color.green : Color.secondary)
+        .frame(width: 7, height: 7)
+
+      Text(title)
+        .font(.caption.weight(.medium))
+        .lineLimit(1)
+    }
+    .foregroundStyle(isActive ? .primary : .secondary)
+    .padding(.horizontal, 11)
+    .padding(.vertical, 7)
+    .background(
+      isActive
+        ? Color.green.opacity(0.12)
+        : Color.secondary.opacity(0.09),
+      in: Capsule()
+    )
+    .accessibilityElement(children: .combine)
   }
 }
 
@@ -508,46 +251,135 @@ private struct SpatialPreviewPanel: View {
   @ObservedObject var model: HubAppModel
 
   var body: some View {
-    DashboardSurface {
+    ContentSurface {
       VStack(alignment: .leading, spacing: 14) {
         PanelHeader(
           title: "空間プレビュー",
           subtitle: "上面図  X / -Z  ·  表示範囲 ±2m",
           systemImage: "viewfinder"
         ) {
-          EmptyView()
+          Text(model.summaryText)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
 
         TrackerTopDownView(
           trackers: model.trackers,
           source: model.displayedSource
         )
-        .frame(minHeight: 350)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("tracker-space-preview")
       }
     }
   }
 }
 
-private struct TrackerListPanel: View {
+private struct TrackerGridPanel: View {
   @ObservedObject var model: HubAppModel
 
+  private var columns: [GridItem] {
+    let count = model.trackers.count > 8 ? 2 : 1
+    return Array(
+      repeating: GridItem(.flexible(), spacing: 8),
+      count: count
+    )
+  }
+
   var body: some View {
-    DashboardSurface {
-      VStack(alignment: .leading, spacing: 14) {
+    ContentSurface {
+      VStack(alignment: .leading, spacing: 12) {
         PanelHeader(
           title: "Tracker",
-          subtitle: "最新の正規化済みpose",
-          systemImage: "list.bullet"
+          subtitle: "正規化済みlatest state",
+          systemImage: "sensor.tag.radiowaves.forward"
         ) {
           TrackerStateSummary(trackers: model.trackers)
         }
 
-        TrackerTable(trackers: model.trackers)
-          .frame(minHeight: 230)
-          .accessibilityIdentifier("tracker-table")
+        if model.trackers.isEmpty {
+          ContentUnavailableView(
+            "Trackerがありません",
+            systemImage: "dot.radiowaves.left.and.right",
+            description: Text(
+              model.displayedSource == .simulator
+                ? "ツールバーからSimulatorを開始してください。"
+                : "UDP受信を開始し、Bridgeを接続してください。"
+            )
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+          LazyVGrid(
+            columns: columns,
+            alignment: .leading,
+            spacing: 7
+          ) {
+            ForEach(model.trackers.prefix(16)) { tracker in
+              TrackerCompactCard(tracker: tracker)
+            }
+          }
+          .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .top
+          )
+          .accessibilityIdentifier("tracker-grid")
+        }
       }
     }
+  }
+}
+
+private struct TrackerCompactCard: View {
+  let tracker: TrackerDisplayState
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: 6) {
+        Circle()
+          .fill(tracker.trackingState.displayColor)
+          .frame(width: 7, height: 7)
+          .accessibilityLabel(tracker.trackingState.displayName)
+
+        Text(tracker.role.isEmpty ? "未割当" : tracker.role)
+          .font(.subheadline.weight(.semibold))
+          .lineLimit(1)
+
+        Spacer(minLength: 4)
+
+        Text(String(format: "%.0f ms", tracker.ageMilliseconds))
+          .font(.caption2.monospacedDigit())
+          .foregroundStyle(.secondary)
+      }
+
+      Text(tracker.id)
+        .font(.caption2.monospaced())
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.middle)
+
+      Text(positionText)
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 5)
+    .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+    .background(
+      Color.secondary.opacity(0.065),
+      in: RoundedRectangle(cornerRadius: 11)
+    )
+    .accessibilityElement(children: .combine)
+  }
+
+  private var positionText: String {
+    String(
+      format: "x %.2f  y %.2f  z %.2f",
+      tracker.position.x,
+      tracker.position.y,
+      tracker.position.z
+    )
   }
 }
 
@@ -562,9 +394,12 @@ private struct TrackerStateSummary: View {
 
   var body: some View {
     if attentionCount > 0 {
-      Label("\(attentionCount)件を確認", systemImage: "exclamationmark.circle.fill")
-        .font(.caption.weight(.medium))
-        .foregroundStyle(.orange)
+      Label(
+        "\(attentionCount)件を確認",
+        systemImage: "exclamationmark.circle.fill"
+      )
+      .font(.caption.weight(.medium))
+      .foregroundStyle(.orange)
     } else if !trackers.isEmpty {
       Label("正常", systemImage: "checkmark.circle.fill")
         .font(.caption.weight(.medium))
@@ -573,16 +408,220 @@ private struct TrackerStateSummary: View {
   }
 }
 
-private struct DiagnosticsPanel: View {
+private struct SourceConfigurationPanel: View {
   @ObservedObject var model: HubAppModel
-  @Binding var isExpanded: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      PopoverHeader(
+        title: "入力設定",
+        subtitle: "変更は開始または再起動時に反映",
+        systemImage: "slider.horizontal.3"
+      )
+
+      Picker("入力", selection: $model.selectedSource) {
+        ForEach(HubInputSource.allCases) { source in
+          Label(source.displayName, systemImage: source.systemImage)
+            .tag(source)
+        }
+      }
+      .pickerStyle(.segmented)
+      .accessibilityIdentifier("configuration-source-picker")
+
+      Divider()
+
+      if model.selectedSource == .simulator {
+        SimulatorConfiguration(model: model)
+      } else {
+        NetworkConfiguration(model: model)
+      }
+
+      if let errorMessage = model.errorMessage {
+        ErrorBanner(message: errorMessage)
+      }
+    }
+    .padding(20)
+    .frame(width: 350)
+  }
+}
+
+private struct SimulatorConfiguration: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      ConfigurationSectionTitle("シーン")
+
+      LabeledContent {
+        Stepper(
+          "\(model.trackerCount) 台",
+          value: $model.trackerCount,
+          in: 1...16
+        )
+        .fixedSize()
+      } label: {
+        Label(
+          "Tracker",
+          systemImage: "dot.radiowaves.left.and.right"
+        )
+      }
+
+      LabeledContent {
+        Picker("モーション", selection: $model.motion) {
+          ForEach(HubAppMotionPreset.allCases) { motion in
+            Label(motion.displayName, systemImage: motion.systemImage)
+              .tag(motion)
+          }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 140, alignment: .trailing)
+        .accessibilityIdentifier("motion-picker")
+      } label: {
+        Label("モーション", systemImage: model.motion.systemImage)
+      }
+
+      LabeledContent {
+        Picker("更新頻度", selection: $model.rate) {
+          ForEach(SimulatorRate.allCases, id: \.rawValue) { rate in
+            Text("\(rate.rawValue) Hz").tag(rate)
+          }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 90, alignment: .trailing)
+      } label: {
+        Label("更新頻度", systemImage: "waveform.path")
+      }
+
+      Divider()
+
+      ConfigurationSectionTitle("障害注入")
+
+      LabeledContent {
+        TextField("Seed", text: $model.seedText)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 92)
+      } label: {
+        Label("再現用Seed", systemImage: "number")
+      }
+
+      FaultControl(
+        title: "Frame loss",
+        value: $model.frameLossPercent
+      )
+
+      FaultControl(
+        title: "Tracking lost",
+        value: $model.trackingLostPercent
+      )
+    }
+  }
+}
+
+private struct NetworkConfiguration: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      ConfigurationSectionTitle("UDP Listener")
+
+      LabeledContent {
+        TextField("Bind address", text: $model.networkBindHost)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 150)
+      } label: {
+        Label("Address", systemImage: "network")
+      }
+
+      LabeledContent {
+        TextField("UDP port", text: $model.networkPortText)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 90)
+      } label: {
+        Label("Port", systemImage: "number")
+      }
+
+      Text("LAN受信は0.0.0.0、Mac内の試験は127.0.0.1")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+}
+
+private struct ConfigurationSectionTitle: View {
+  let title: String
+
+  init(_ title: String) {
+    self.title = title
+  }
+
+  var body: some View {
+    Text(title)
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+  }
+}
+
+private struct FaultControl: View {
+  let title: String
+  @Binding var value: Double
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text(title)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Spacer()
+        Text(
+          value.formatted(
+            .number.precision(.fractionLength(1))
+          ) + "%"
+        )
+        .font(.caption.monospacedDigit())
+      }
+
+      Slider(value: $value, in: 0...50, step: 0.5)
+    }
+  }
+}
+
+private struct ErrorBanner: View {
+  let message: String
+
+  var body: some View {
+    Label(message, systemImage: "exclamationmark.triangle.fill")
+      .font(.caption)
+      .foregroundStyle(.red)
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        Color.red.opacity(0.08),
+        in: RoundedRectangle(cornerRadius: 10)
+      )
+  }
+}
+
+private struct DiagnosticsPopover: View {
+  @ObservedObject var model: HubAppModel
 
   private var items: [DiagnosticItem] {
     switch model.displayedSource {
     case .simulator:
       [
-        DiagnosticItem(title: "Attempted", value: "\(model.attemptedFrames)"),
-        DiagnosticItem(title: "Emitted", value: "\(model.emittedFrames)"),
+        DiagnosticItem(
+          title: "Attempted",
+          value: "\(model.attemptedFrames)"
+        ),
+        DiagnosticItem(
+          title: "Emitted",
+          value: "\(model.emittedFrames)"
+        ),
         DiagnosticItem(
           title: "Frame loss",
           value: String(format: "%.1f%%", model.droppedPercent)
@@ -598,7 +637,10 @@ private struct DiagnosticsPanel: View {
           title: "Datagram",
           value: "\(model.receivedDatagrams)"
         ),
-        DiagnosticItem(title: "Valid", value: "\(model.validPackets)"),
+        DiagnosticItem(
+          title: "Valid",
+          value: "\(model.validPackets)"
+        ),
         DiagnosticItem(
           title: "欠落Frame",
           value: "\(model.missingFrames)"
@@ -620,30 +662,62 @@ private struct DiagnosticsPanel: View {
   }
 
   var body: some View {
-    DashboardSurface {
-      DisclosureGroup(isExpanded: $isExpanded) {
-        LazyVGrid(
-          columns: [
-            GridItem(.adaptive(minimum: 130), spacing: 12)
-          ],
-          spacing: 12
-        ) {
-          ForEach(items) { item in
-            DiagnosticValue(item: item)
-          }
-        }
-        .padding(.top, 14)
-      } label: {
-        HStack {
-          Label("診断情報", systemImage: "waveform.path")
-            .font(.headline)
-          Spacer()
-          Text("必要なときだけ表示")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+    VStack(alignment: .leading, spacing: 16) {
+      PopoverHeader(
+        title: "診断情報",
+        subtitle: model.displayedSource.displayName,
+        systemImage: "waveform.path.ecg"
+      )
+
+      LazyVGrid(
+        columns: [
+          GridItem(.flexible(), spacing: 10),
+          GridItem(.flexible(), spacing: 10),
+        ],
+        spacing: 10
+      ) {
+        ForEach(items) { item in
+          DiagnosticValue(item: item)
         }
       }
-      .accessibilityIdentifier("diagnostics-disclosure")
+
+      if model.activeSource == .network,
+        let endpoint = model.boundEndpoint
+      {
+        Label(endpoint, systemImage: "network")
+          .font(.caption.monospaced())
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+    }
+    .padding(20)
+    .frame(width: 370)
+  }
+}
+
+private struct PopoverHeader: View {
+  let title: String
+  let subtitle: String
+  let systemImage: String
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: systemImage)
+        .font(.title3.weight(.semibold))
+        .foregroundStyle(.tint)
+        .frame(width: 34, height: 34)
+        .background(
+          Color.accentColor.opacity(0.1),
+          in: RoundedRectangle(cornerRadius: 10)
+        )
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.headline)
+        Text(subtitle)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
   }
 }
@@ -665,12 +739,14 @@ private struct DiagnosticValue: View {
         .foregroundStyle(.secondary)
       Text(item.value)
         .font(.title3.monospacedDigit().weight(.semibold))
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
     }
-    .padding(12)
+    .padding(11)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      Color.secondary.opacity(0.06),
-      in: RoundedRectangle(cornerRadius: 10)
+      Color.secondary.opacity(0.065),
+      in: RoundedRectangle(cornerRadius: 11)
     )
   }
 }
@@ -694,12 +770,15 @@ private struct PanelHeader<Trailing: View>: View {
   }
 
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
+    HStack(alignment: .center, spacing: 11) {
       Image(systemName: systemImage)
         .font(.headline)
         .foregroundStyle(.tint)
         .frame(width: 28, height: 28)
-        .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background(
+          Color.accentColor.opacity(0.1),
+          in: RoundedRectangle(cornerRadius: 8)
+        )
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
@@ -715,7 +794,7 @@ private struct PanelHeader<Trailing: View>: View {
   }
 }
 
-private struct DashboardSurface<Content: View>: View {
+private struct ContentSurface<Content: View>: View {
   let content: Content
 
   init(@ViewBuilder content: () -> Content) {
@@ -725,60 +804,15 @@ private struct DashboardSurface<Content: View>: View {
   var body: some View {
     content
       .padding(16)
-      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(
+        .regularMaterial,
+        in: RoundedRectangle(cornerRadius: 18)
+      )
       .overlay {
-        RoundedRectangle(cornerRadius: 16)
+        RoundedRectangle(cornerRadius: 18)
           .stroke(.quaternary, lineWidth: 1)
       }
-  }
-}
-
-private struct TrackerTable: View {
-  let trackers: [TrackerDisplayState]
-
-  var body: some View {
-    Table(trackers) {
-      TableColumn("Tracker") { tracker in
-        VStack(alignment: .leading, spacing: 2) {
-          Text(tracker.role.isEmpty ? "未割当" : tracker.role)
-            .fontWeight(.medium)
-          Text(tracker.id)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-      }
-      .width(min: 180, ideal: 230)
-
-      TableColumn("状態") { tracker in
-        Label(
-          tracker.trackingState.displayName,
-          systemImage: "circle.fill"
-        )
-        .foregroundStyle(tracker.trackingState.displayColor)
-      }
-      .width(min: 100, ideal: 120)
-
-      TableColumn("位置 X / Y / Z") { tracker in
-        Text(
-          String(
-            format: "%.3f  /  %.3f  /  %.3f",
-            tracker.position.x,
-            tracker.position.y,
-            tracker.position.z
-          )
-        )
-        .font(.body.monospacedDigit())
-      }
-      .width(min: 210, ideal: 250)
-
-      TableColumn("Age") { tracker in
-        Text(String(format: "%.0f ms", tracker.ageMilliseconds))
-          .monospacedDigit()
-          .foregroundStyle(.secondary)
-      }
-      .width(80)
-    }
   }
 }
 
@@ -806,10 +840,10 @@ private struct TrackerTopDownView: View {
           endPoint: .bottomTrailing
         )
       }
-      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .clipShape(RoundedRectangle(cornerRadius: 13))
     }
     .overlay {
-      RoundedRectangle(cornerRadius: 12)
+      RoundedRectangle(cornerRadius: 13)
         .stroke(.quaternary, lineWidth: 1)
     }
     .overlay {
@@ -819,24 +853,31 @@ private struct TrackerTopDownView: View {
           systemImage: "dot.radiowaves.left.and.right",
           description: Text(
             source == .simulator
-              ? "サイドバーからSimulatorを開始してください。"
-              : "UDP受信を開始し、Bridgeまたはtest senderを起動してください。"
+              ? "ツールバーからSimulatorを開始してください。"
+              : "UDP受信を開始し、Bridgeを接続してください。"
           )
         )
       }
     }
   }
 
-  private func drawGrid(context: inout GraphicsContext, size: CGSize) {
+  private func drawGrid(
+    context: inout GraphicsContext,
+    size: CGSize
+  ) {
     let center = CGPoint(x: size.width / 2, y: size.height / 2)
     let scale = min(size.width, size.height) / (visibleHalfRange * 2)
     var grid = Path()
     for meter in -2...2 {
       let offset = CGFloat(meter) * scale
       grid.move(to: CGPoint(x: center.x + offset, y: 0))
-      grid.addLine(to: CGPoint(x: center.x + offset, y: size.height))
+      grid.addLine(
+        to: CGPoint(x: center.x + offset, y: size.height)
+      )
       grid.move(to: CGPoint(x: 0, y: center.y + offset))
-      grid.addLine(to: CGPoint(x: size.width, y: center.y + offset))
+      grid.addLine(
+        to: CGPoint(x: size.width, y: center.y + offset)
+      )
     }
     context.stroke(
       grid,
@@ -889,6 +930,46 @@ private struct TrackerTopDownView: View {
       at: CGPoint(x: point.x, y: point.y - 19),
       anchor: .bottom
     )
+  }
+}
+
+private struct GlassButtonModifier: ViewModifier {
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *) {
+        content.buttonStyle(.glass)
+      } else {
+        content.buttonStyle(.bordered)
+      }
+    #else
+      content.buttonStyle(.bordered)
+    #endif
+  }
+}
+
+private struct GlassProminentButtonModifier: ViewModifier {
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *) {
+        content.buttonStyle(.glassProminent)
+      } else {
+        content.buttonStyle(.borderedProminent)
+      }
+    #else
+      content.buttonStyle(.borderedProminent)
+    #endif
+  }
+}
+
+extension View {
+  fileprivate func diviveGlassButton() -> some View {
+    modifier(GlassButtonModifier())
+  }
+
+  fileprivate func diviveGlassProminentButton() -> some View {
+    modifier(GlassProminentButtonModifier())
   }
 }
 

@@ -14,22 +14,40 @@ cd hub
 swift run divive-hub-app
 ```
 
-ビルド後に`Divive Hub`ウィンドウが開きます。左側で入力Sourceを選び、設定後に
-「開始」または「受信開始」を押します。停止後も画面のsnapshot更新は続くため、
-既定では約250ms後に`Lost`、約2秒後に`Disconnected`へ変化することを確認できます。
+ビルド後に`Divive Hub`ウィンドウが開きます。ツールバーで入力Sourceを選び、
+「設定」で入力条件を指定してから「開始」または「受信開始」を押します。停止後も
+画面のsnapshot更新は続くため、既定では約250ms後に`Lost`、約2秒後に
+`Disconnected`へ変化することを確認できます。
 
 ## 画面構成
 
-日常的な操作と診断情報を同じ強さで並べず、次の順で情報を表示します。
+ウィンドウ内にスクロール領域を作らず、次の固定レイアウトで情報を表示します。
 
-- サイドバー: Source選択、基本設定、開始・停止
-- 詳細設定: seed、frame loss、tracking lost。通常は折りたたむ
-- メイン画面: 空間プレビュー、Tracker一覧
-- 上部ステータス: Hub更新レートとTracker数
-- 診断情報: packetやSimulatorの詳細値。必要なときだけ展開する
+- ツールバー: Source選択、設定、診断、開始・停止
+- ヘッダー: Hub更新レート、Tracker数、Source状態
+- 左ペイン: Tracker空間の上面プレビュー
+- 右ペイン: Trackerのrole、ID、状態、位置、receive age
+- 設定popover: SimulatorまたはUDPの設定
+- 診断popover: packetまたはSimulatorの詳細値
 
-空間とTracker状態を常に見える主情報とし、障害注入と通信診断は通常操作を妨げない
-位置へ分離しています。
+Trackerが8台以下なら1列、9〜16台なら2列で表示し、最大16台でも一覧内の
+スクロールを必要としません。ウィンドウを操作不能な大きさへ縮めないよう、
+最小サイズを1120×700ptに設定しています。
+
+## Liquid Glass
+
+macOS 26以降では、設定・診断・開始・停止の操作にSwiftUIの`glass`または
+`glassProminent` button styleを使います。popover、toolbar、標準controlも
+OSが提供するLiquid Glassの外観とアクセシビリティ設定へ自動的に追従します。
+Liquid Glassとしてビルドする場合はXcode 26以降のSDKが必要です。古いXcodeでは
+コンパイル時にGlass APIを除外し、標準のbordered buttonを使います。
+
+Appleの
+[Materials](https://developer.apple.com/design/human-interface-guidelines/materials)と
+[Adopting Liquid Glass](https://developer.apple.com/documentation/TechnologyOverviews/adopting-liquid-glass)
+に従い、Liquid Glassは操作とnavigationの機能層だけに使います。空間プレビューと
+Tracker一覧はGlassを重ねず、標準materialのコンテンツ層として表示します。
+macOS 14〜25では同じ情報階層を維持し、標準のbordered buttonへfallbackします。
 
 ## Simulator
 
