@@ -760,10 +760,8 @@ private struct TrackerQualityHistory: View {
     }
   }
 
-  private var frameLossTotal: UInt64 {
-    visibleSamples.reduce(0) {
-      $0 + $1.frameLossCount
-    }
+  private var qualitySummary: TrackerQualitySummary {
+    TrackerQualitySummary(samples: visibleSamples)
   }
 
   private var hasTrackingLoss: Bool {
@@ -776,10 +774,18 @@ private struct TrackerQualityHistory: View {
     guard !visibleSamples.isEmpty else {
       return "履歴はまだありません"
     }
-    let trackingDescription =
-      hasTrackingLoss ? "追跡喪失あり" : "追跡喪失なし"
     return
-      "フレーム欠落\(frameLossTotal)件、\(trackingDescription)"
+      "フレーム欠落\(qualitySummary.frameLossCount)件、"
+      + "\(frameLossPercentText)、"
+      + "追跡喪失\(trackingLossPercentText)"
+  }
+
+  private var frameLossPercentText: String {
+    String(format: "%.1f%%", qualitySummary.frameLossPercent)
+  }
+
+  private var trackingLossPercentText: String {
+    String(format: "%.1f%%", qualitySummary.trackingLossPercent)
   }
 
   private func seconds(
@@ -801,27 +807,22 @@ private struct TrackerQualityHistory: View {
 
         Spacer()
 
-        Group {
-          if frameLossTotal == 0, !hasTrackingLoss {
-            Label("異常なし", systemImage: "checkmark.circle.fill")
-              .foregroundStyle(.green)
-          } else {
-            HStack(spacing: 8) {
-              if frameLossTotal > 0 {
-                Label(
-                  "\(frameLossTotal)件",
-                  systemImage: "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(.orange)
-              }
-              if hasTrackingLoss {
-                Label("喪失", systemImage: "eye.slash.fill")
-                  .foregroundStyle(.red)
-              }
-            }
-          }
+        HStack(spacing: 10) {
+          Text(
+            "欠落 \(qualitySummary.frameLossCount)件 "
+              + frameLossPercentText
+          )
+          .foregroundStyle(
+            qualitySummary.frameLossCount > 0
+              ? Color.orange : Color.secondary
+          )
+
+          Text("喪失 \(trackingLossPercentText)")
+            .foregroundStyle(
+              hasTrackingLoss ? Color.red : Color.secondary
+            )
         }
-        .font(.caption2.weight(.medium))
+        .font(.caption2.monospacedDigit().weight(.medium))
       }
 
       if visibleSamples.isEmpty {
@@ -928,7 +929,7 @@ private struct TrackerQualityHistory: View {
         .accessibilityLabel("直近6秒の品質の推移")
         .accessibilityValue(accessibilityValue)
         .help(
-          "欠落はSource全体で検出した区間、追跡は選択Trackerの状態です"
+          "欠落率は期待frame数、喪失率は選択Trackerの観測時間に対する割合です"
         )
       }
     }
