@@ -968,20 +968,22 @@ private struct DiagnosticsSection: View {
     case .simulator:
       [
         DiagnosticItem(
-          title: "生成",
-          value: "\(model.attemptedFrames)"
-        ),
-        DiagnosticItem(
-          title: "出力",
-          value: "\(model.emittedFrames)"
+          title: "生成 / 出力",
+          value: "\(model.attemptedFrames) / \(model.emittedFrames)"
         ),
         DiagnosticItem(
           title: "欠落率",
           value: String(format: "%.1f%%", model.droppedPercent)
         ),
         DiagnosticItem(
-          title: "期限超過",
-          value: "\(model.missedDeadlines)"
+          title: "接続断 / 逆転",
+          value:
+            "\(model.disconnectedFrames) / \(model.staleSimulatorFrames)"
+        ),
+        DiagnosticItem(
+          title: "保留 / 期限",
+          value:
+            "\(model.simulatorPendingFrames) / \(model.missedDeadlines)"
         ),
       ]
     case .network:
@@ -1017,7 +1019,8 @@ private struct DiagnosticsSection: View {
   private var needsAttention: Bool {
     switch model.displayedSource {
     case .simulator:
-      model.droppedFrames > 0 || model.missedDeadlines > 0
+      model.simulatorUndeliveredFrames > 0
+        || model.missedDeadlines > 0
     case .network:
       model.missingFrames > 0 || model.networkAnomalyCount > 0
     }
@@ -1220,6 +1223,40 @@ private struct SimulatorConfiguration: View {
         title: "トラッキング喪失",
         value: $model.trackingLostPercent
       )
+
+      Divider()
+
+      ConfigurationSectionTitle("配信経路")
+
+      CompactFaultValue(
+        title: "遅延",
+        value: $model.delayMilliseconds,
+        suffix: "ms"
+      )
+
+      CompactFaultValue(
+        title: "ジッター ±",
+        value: $model.jitterMilliseconds,
+        suffix: "ms"
+      )
+
+      FaultControl(
+        title: "順序逆転率",
+        value: $model.reorderingPercent,
+        range: 0...100
+      )
+
+      FaultControl(
+        title: "接続断の開始率",
+        value: $model.disconnectPercent,
+        range: 0...100
+      )
+
+      CompactFaultValue(
+        title: "切断時間",
+        value: $model.disconnectDurationMilliseconds,
+        suffix: "ms"
+      )
     }
   }
 }
@@ -1270,6 +1307,7 @@ private struct ConfigurationSectionTitle: View {
 private struct FaultControl: View {
   let title: String
   @Binding var value: Double
+  var range: ClosedRange<Double> = 0...50
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -1286,7 +1324,33 @@ private struct FaultControl: View {
         .font(.caption.monospacedDigit())
       }
 
-      Slider(value: $value, in: 0...50, step: 0.5)
+      Slider(value: $value, in: range, step: 0.5)
+    }
+  }
+}
+
+private struct CompactFaultValue: View {
+  let title: String
+  @Binding var value: Double
+  let suffix: String
+
+  var body: some View {
+    LabeledContent(title) {
+      HStack(spacing: 5) {
+        TextField(
+          title,
+          value: $value,
+          format: .number.precision(.fractionLength(0...1))
+        )
+        .textFieldStyle(.roundedBorder)
+        .multilineTextAlignment(.trailing)
+        .frame(width: 72)
+
+        Text(suffix)
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(.secondary)
+          .frame(width: 24, alignment: .leading)
+      }
     }
   }
 }

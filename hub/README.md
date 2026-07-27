@@ -26,7 +26,7 @@ Packageは次の責務に分けています。
 | `HubProtocol` | wire decode、canonical model、sequence/batch判定 |
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
-| `HubSimulator` | 固定step motion、Tracker編集、seed付き障害注入 |
+| `HubSimulator` | 固定step motion、Tracker編集、seed付き生成・配信障害注入 |
 | `HubAppUI` | UDP / Simulator runtime、source切替、10Hz latest snapshot、SwiftUI画面 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 | `divive-simulator` | Headless Simulatorの実時間CLI |
@@ -81,7 +81,8 @@ testは次を含みます。
 - batch到着順、partial確定、metadata矛盾、Tracker ID重複
 - latest state、前回値保持、session / tracking space reset
 - liveness policy検証、age境界、source状態保持、partialからの復帰
-- SimulatorのTracker編集、fixed-step motion、seed再現性、fault、Hub sink結合
+- SimulatorのTracker編集、fixed-step motion、seed再現性、生成・配信fault、
+  有界queue、Hub sink結合
 - GUI設定からのscene生成と実時間runtimeの開始・停止
 - 実UDP socketを使うlocalhost loopback
 

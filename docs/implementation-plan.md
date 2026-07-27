@@ -32,6 +32,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] deterministic Headless Simulator coreとCLI
 - [x] static / circle / walk / jump / random、30 / 60 / 90 / 120Hz
 - [x] seed付きframe loss / tracking lost
+- [x] seed付きdelay / jitter / reordering / disconnectと有界配信queue
 - [x] SwiftUI Simulator GUIの開始・停止、上面図、Tracker一覧、基本metrics
 - [x] SwiftUI GUIのUDP / Simulator source切替とNetwork metrics
 - [x] OpenVR poseをcanonical modelとUDP publisherへ接続
@@ -234,7 +235,8 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 - [x] X / -Z上面図
 - [ ] RealityKitによる3D pose表示
 - [x] tracking、lost、disconnected、simulated
-- [x] Simulator rate、frame loss、age、deadline miss
+- [x] Simulator rate、frame loss、delay、jitter、reordering、disconnect、
+  age、deadline miss
 - [x] Network loss、duplicate、out-of-order、invalid packet
 - [ ] Network jitter、clock mapping、one-way latency推定
 - [ ] roleとprofile編集
@@ -297,7 +299,7 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] static、circle
 - [x] walk、jump、random
 - [x] frame loss、tracking lost
-- [ ] delay、jitter、reordering、disconnect
+- [x] delay、jitter、reordering、disconnect
 - [x] `HubFrameSink`による実機正規化後と同じHub input interface
 
 ### F2. Calibration

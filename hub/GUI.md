@@ -63,8 +63,10 @@ Trackerは常に2列の選択可能な一覧として表示し、最大16台で�
 ウィンドウを操作不能な大きさへ縮めないよう、最小サイズを1120×700ptに設定しています。
 
 診断値はpopoverに隠さず、右インスペクタ下部へ常時表示します。Simulatorでは
-生成、出力、frame loss、deadline missを、UDP受信ではdatagram、有効packet、
-欠落frame、順序逆転、受信異常、受信処理時間を確認できます。
+生成、出力、frame loss、接続断による破棄、順序逆転、配信保留、deadline missを、
+UDP受信ではdatagram、有効packet、欠落frame、順序逆転、受信異常、受信処理時間を
+確認できます。Simulatorの値は固定レイアウトを維持するため、`生成 / 出力`、
+`接続断 / 逆転`、`保留 / 期限`の関連する組を同じ行へまとめます。
 
 ## Liquid Glass
 
@@ -132,11 +134,16 @@ Sourceを開始または切り替えた時点で履歴と累積値の基準をre
 - 再現用seed
 - frame loss: 0〜50%
 - Tracker単位のtracking lost: 0〜50%
+- 固定delayと±jitter: ミリ秒
+- 隣接frameのreordering: 0〜100%
+- disconnect開始確率と継続時間
 - Simulatorの開始、設定を反映した再起動、停止
 - Tracker数が増えても、初期位置を±2mプレビュー内へ収める自動間隔
 
 設定は「開始」または「設定を反映」を押した時点で反映します。seedを含む
-設定が同一なら、Headless Simulatorのmotionとfault列も同一です。
+設定が同一なら、Headless Simulatorのmotionとfault列も同一です。delay、
+jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipelineで処理し、
+実運用と同じHubのstale / liveness判定へ渡します。
 
 ## UDP受信
 
@@ -173,8 +180,9 @@ sender allowlistがないため、信頼できるprivate LANでのみ使って�
 - 全Trackerのrole、実効tracking state、receive age
 - 選択Trackerの恒久IDとX / Y / Z位置
 
-Simulatorでは累積frame loss率とdeadline miss数を表示します。UDP受信では次を
-表示します。
+Simulatorでは生成drop、接続断、overflow、staleになった順序逆転frameを合算した
+累積欠落率とdeadline miss数を表示します。配信待ちframeはまだ欠落していないため
+欠落率へ含めず、pendingとして別表示します。UDP受信では次を表示します。
 
 - 受信datagram数
 - sequenceから検出した欠落frame数
@@ -194,6 +202,7 @@ monotonic clock mappingが未実装のため、captureから受信までの遅�
 ```text
 UDPReceiver / SimulatorEngine
   → NetworkRuntime / SimulatorRuntime actor
+      → Simulatorのみ有界な配信障害pipeline
   → HubStateStore latest state
   → 10Hz snapshot
   → SwiftUI MainActor
@@ -214,7 +223,6 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - RealityKitによる3D pose表示
 - TrackerごとのID、role、位置、回転編集
 - scene保存・読み込み
-- delay、jitter、reordering、disconnectの障害注入
 - calibration、Recorder / Playback、content配信
 - `.app` bundle、署名、notarization、配布
 

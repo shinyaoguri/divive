@@ -27,7 +27,7 @@ public struct HubMenuBarStatus: Equatable, Sendable {
         $0.trackingState != .tracking && $0.trackingState != .simulated
       },
       anomalyCount: model.displayedSource == .simulator
-        ? model.droppedFrames + model.missedDeadlines
+        ? model.simulatorUndeliveredFrames + model.missedDeadlines
         : model.missingFrames + model.networkAnomalyCount,
       errorMessage: model.errorMessage
     )
@@ -63,15 +63,17 @@ public struct HubMenuBarStatus: Equatable, Sendable {
       severity = .warning
       menuTitle = "要確認"
       title = "入力品質に問題があります"
-      detail = source == .simulator
-        ? "欠落フレームまたは処理遅延を検出しました。"
+      detail =
+        source == .simulator
+        ? "欠落、順序逆転、接続断または処理遅延を検出しました。"
         : "欠落フレームまたは受信異常を検出しました。"
       systemImage = "exclamationmark.triangle.fill"
     } else if trackerCount == 0 {
       severity = .waiting
       menuTitle = "待機"
       title = source == .network ? "UDPデータを待っています" : "準備中です"
-      detail = source == .network
+      detail =
+        source == .network
         ? "Windows Bridgeからまだ姿勢を受信していません。"
         : "Trackerの生成を待っています。"
       systemImage = "ellipsis.circle"

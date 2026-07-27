@@ -74,6 +74,11 @@ public final class HubAppModel: ObservableObject {
   @Published public var seedText = "42"
   @Published public var frameLossPercent = 0.0
   @Published public var trackingLostPercent = 0.0
+  @Published public var delayMilliseconds = 0.0
+  @Published public var jitterMilliseconds = 0.0
+  @Published public var reorderingPercent = 0.0
+  @Published public var disconnectPercent = 0.0
+  @Published public var disconnectDurationMilliseconds = 2_500.0
 
   @Published public private(set) var activeSource: HubInputSource?
   @Published public private(set) var isRunning = false
@@ -85,6 +90,11 @@ public final class HubAppModel: ObservableObject {
   @Published public private(set) var attemptedFrames: UInt64 = 0
   @Published public private(set) var emittedFrames: UInt64 = 0
   @Published public private(set) var droppedFrames: UInt64 = 0
+  @Published public private(set) var staleSimulatorFrames: UInt64 = 0
+  @Published public private(set) var disconnectEvents: UInt64 = 0
+  @Published public private(set) var disconnectedFrames: UInt64 = 0
+  @Published public private(set) var simulatorPendingFrames: UInt64 = 0
+  @Published public private(set) var simulatorOverflowFrames: UInt64 = 0
   @Published public private(set) var missedDeadlines: UInt64 = 0
 
   @Published public private(set) var receivedDatagrams: UInt64 = 0
@@ -159,7 +169,12 @@ public final class HubAppModel: ObservableObject {
 
   public var droppedPercent: Double {
     guard attemptedFrames > 0 else { return 0 }
-    return Double(droppedFrames) / Double(attemptedFrames) * 100
+    return Double(simulatorUndeliveredFrames) / Double(attemptedFrames) * 100
+  }
+
+  public var simulatorUndeliveredFrames: UInt64 {
+    droppedFrames + disconnectedFrames + simulatorOverflowFrames
+      + staleSimulatorFrames
   }
 
   public var networkAnomalyCount: UInt64 {
@@ -249,7 +264,12 @@ public final class HubAppModel: ObservableObject {
       motion: motion,
       seed: seed,
       frameLossProbability: frameLossPercent / 100,
-      trackingLostProbability: trackingLostPercent / 100
+      trackingLostProbability: trackingLostPercent / 100,
+      delayMilliseconds: delayMilliseconds,
+      jitterMilliseconds: jitterMilliseconds,
+      reorderingProbability: reorderingPercent / 100,
+      disconnectProbability: disconnectPercent / 100,
+      disconnectDurationMilliseconds: disconnectDurationMilliseconds
     )
   }
 
@@ -273,11 +293,32 @@ public final class HubAppModel: ObservableObject {
     publish(snapshot.metrics.attemptedFrames, to: \.attemptedFrames)
     publish(snapshot.metrics.emittedFrames, to: \.emittedFrames)
     publish(snapshot.metrics.droppedFrames, to: \.droppedFrames)
+    publish(snapshot.metrics.staleFrames, to: \.staleSimulatorFrames)
+    publish(
+      snapshot.metrics.transport.disconnectEvents,
+      to: \.disconnectEvents
+    )
+    publish(
+      snapshot.metrics.transport.disconnectedFrames,
+      to: \.disconnectedFrames
+    )
+    publish(
+      snapshot.metrics.transport.pendingFrames,
+      to: \.simulatorPendingFrames
+    )
+    publish(
+      snapshot.metrics.transport.overflowFrames,
+      to: \.simulatorOverflowFrames
+    )
     publish(snapshot.metrics.missedDeadlines, to: \.missedDeadlines)
     updateTrackers(
       snapshot.hubState.trackers.map(TrackerDisplayState.init),
       sampledAtNS: snapshot.monotonicNS,
-      cumulativeFrameLoss: snapshot.metrics.droppedFrames,
+      cumulativeFrameLoss:
+        snapshot.metrics.droppedFrames
+        + snapshot.metrics.transport.disconnectedFrames
+        + snapshot.metrics.transport.overflowFrames
+        + snapshot.metrics.staleFrames,
       cumulativeDeliveredFrames: snapshot.metrics.emittedFrames
     )
     if let runtimeError = snapshot.metrics.lastError {
