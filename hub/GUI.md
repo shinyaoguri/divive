@@ -50,7 +50,8 @@ macOSの運用コンソールとして、空間の動きと異常の発見を主
 - メニューバー: ウィンドウを閉じても継続する状態監視と最小限の復旧操作
 - ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、開始または停止、
   右端の現在Source設定
-- ライブ空間: X / -Z上面プレビューと、Source状態、更新レート、Tracker数
+- ライブ空間: Quaternionの向きが分かる3Dプレビュー、上面・正面・側面の
+  直交プレビュー、Source状態、更新レート、Tracker数、Simulator直接操作
 - 右インスペクタ上部: 最大16台のTracker一覧
 - 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
 - 右インスペクタ中央: 選択したTrackerの直近6秒の位置推移
@@ -138,12 +139,97 @@ Sourceを開始または切り替えた時点で履歴と累積値の基準をre
 - 隣接frameのreordering: 0〜100%
 - disconnect開始確率と継続時間
 - Simulatorの開始、設定を反映した再起動、停止
-- Tracker数が増えても、初期位置を±2mプレビュー内へ収める自動間隔
+- Tracker数が増えても、初期位置を既定の4m幅へ収める自動間隔
+- 3D表示でTrackerを掴み、現在の視点に平行な面へ直接移動
+- 対角上部から中心を向く仮想Base Station 2台の3D・直交表示
+- 上面・正面・側面を切り替えたマウスドラッグによるXYZ位置編集
+- 幅・高さ・奥行きを個別指定する0.25〜1,000mの作業空間と自動fit
+- 作業空間への位置制限、直前の移動のUndo
 
 設定は「開始」または「設定を反映」を押した時点で反映します。seedを含む
 設定が同一なら、Headless Simulatorのmotionとfault列も同一です。delay、
 jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipelineで処理し、
 実運用と同じHubのstale / liveness判定へ渡します。
+
+### Trackerのマウス操作
+
+既定の`3D`表示では「Tracker移動」が選択されています。SimulatorのTrackerを直接
+ドラッグすると、掴んだ位置を保ったまま現在の視点に平行な面を移動します。
+RealityKitの実際のポインタ光線と固定したドラッグ面の交点から位置を求めるため、
+斜め視点や拡大縮小後もTrackerがポインタへ画面上で追従します。X、Y、Zを
+組み合わせた直感的な配置ができます。
+
+1軸を固定した精密編集では、上面・正面・側面へ切り替えてTrackerをドラッグします。
+選択中の投影面に対応する2軸だけを変更し、残りの1軸を保持します。
+
+| 表示 | 画面右 | 画面上 | 保持する軸 |
+| --- | --- | --- | --- |
+| 上面 | +X | -Z | Y |
+| 正面 | +X | +Y | Z |
+| 側面 | -Z | +Y | X |
+
+例えば上面でX/Zを決めてから正面または側面へ切り替えれば、マウスだけでXYZすべてを
+設定できます。ドラッグ開始時のポインタとTrackerのずれを保つため、選択時にTrackerが
+ポインタへ飛びません。Trackerのmotion presetは停止せず、現在見えている位置が
+ポインタへ来るようmotionのbase poseを移動します。移動はSimulatorを再起動するまで
+有効で、直前のドラッグだけは上部のUndoボタンで取り消せます。
+
+作業空間ボタンでは幅X、高さY、奥行きZを個別に指定できます。X/Zは原点中心、Yは
+床面0mから上方向の有限空間として扱い、縦横比を保ってプレビュー内へ自動fitします。
+「Trackerを作業空間内に制限」が有効なら、ドラッグ位置を各境界でclampします。
+無効にすると範囲外へも移動できますが、範囲外のTrackerはプレビューに見えなくなる
+場合があります。
+
+### 3D姿勢表示
+
+macOS 15以降ではRealityKitの`RealityView`を使い、作業空間、床grid、Trackerを
+3D表示します。右上の方向cubeは`Y`上面、`-Z`正面、`X`側面へ切り替え、`3D`で
+透視表示へ戻します。下部のnavigation barでは、Trackerの直接操作とUnityに近い
+視点操作を2つのmodeとして切り替えます。Trackerをクリックすると右インスペクタの
+選択も同期します。
+
+| mode | 操作 | 入力 |
+| --- | --- | --- |
+| Tracker移動 | Trackerを掴んだまま画面に沿って直接移動 | Trackerを左ドラッグ |
+| 視点操作 | turntable回転 | 空間を左ドラッグ |
+| 視点操作 | 画面内の平行移動 | ホイール／中ボタンを押したままドラッグ |
+| 視点操作 | 拡大縮小 | ホイール、2本指スクロール、またはピンチ |
+
+Tracker移動中もOptionを押している間だけ、一時的に視点操作へ切り替えられます。
+
+Tracker移動はSimulator実行中だけ有効です。UDP受信時はposeを観測するだけで、
+Hubから実機Trackerの位置を書き換えません。3Dの画面平面移動でも作業空間への制限と
+単一Undoを共用します。視線方向の奥行きや任意の1軸だけを数値的に合わせる場合は、
+方向cubeから対応する直交表示へ切り替えます。
+
+`作業空間を全表示`はpan、zoom、回転中心を解除し、作業空間を斜め上から見渡せる
+既定の俯瞰角へ戻します。回転はBlenderのturntable同様にworldの上を保ち、
+上下角を制限するため、視点が反転して方向を見失いません。
+
+作業空間の最大辺をpreview内の一定サイズへ正規化するため、0.25〜1,000mの範囲を
+切り替えても全体の比率を保って確認できます。この正規化は表示専用で、Hubの
+metre値やcalibrationには影響しません。
+
+各Trackerは向きを読み違えにくい非対称形状とし、青い矢印をlocal `-Z`前方として
+表示します。選択Trackerには赤い`+X`、緑の`+Y`も表示し、右インスペクタには
+Quaternionから求めた前方vectorのX/Y/Z成分を表示します。
+
+Simulatorでは仮想Base Station `B1` / `B2`を作業空間の対角上部へ配置し、
+中心方向を向く黒い本体と橙色の方向表示で可視化します。上面・正面・側面では
+橙色の破線で中心方向を示します。作業空間設定の「ベースステーションを表示」で
+表示を切り替えられます。これらは設置関係を確認する静的な参照設備であり、
+Tracker一覧、pose frame、品質統計、録画対象には含めません。
+
+ここでいう前方は共通pose規約のlocal `-Z`です。物理VIVE Trackerのロゴ面や装着対象の
+「前」と一致するとは限らず、装着offsetやcalibration profileは別に適用する必要が
+あります。macOS 14では3Dを利用できないため、上面・正面・側面で確認します。
+
+実装はAppleの
+[RealityView](https://developer.apple.com/documentation/realitykit/realityview)を
+使用します。視点設計は
+[Unity Scene view navigation](https://docs.unity3d.com/Manual/SceneViewNavigation.html)と
+[Blender Navigation](https://docs.blender.org/manual/en/latest/editors/3dview/navigate/navigation.html)
+の共通操作をMac向けに整理しています。
 
 ## UDP受信
 
@@ -176,7 +262,9 @@ sender allowlistがないため、信頼できるprivate LANでのみ使って�
 
 - Hub latest stateの実測更新レート
 - Hubへ入力したTracker数と全体の追跡状態
-- X / -Z上面図。表示範囲は原点から±2m
+- Quaternion、local -Z前方、作業空間を確認するRealityKit 3D表示
+- X/-Z上面、X/Y正面、-Z/Y側面の直交プレビュー
+- 作業空間に応じた可変gridと全体の自動fit
 - 全Trackerのrole、実効tracking state、receive age
 - 選択Trackerの恒久IDとX / Y / Z位置
 
@@ -194,8 +282,9 @@ Simulatorでは生成drop、接続断、overflow、staleになった順序逆転
 受信処理時間はWindowsからMacへのone-way latencyではありません。BridgeとHubの
 monotonic clock mappingが未実装のため、captureから受信までの遅延はまだ断定しません。
 
-上面図は内部共通座標のXを画面右、-Zを画面上として表示します。これはコンテンツ用の
-2D座標変換ではなく、Tracker Spaceの簡易診断表示です。
+各投影は内部共通座標をそのまま使う診断・Simulator編集表示です。コンテンツ用の
+2D座標変換やcalibration profileではありません。UDP受信中も同じ投影で確認できますが、
+実機姿勢を誤って変更しないよう直接操作はSimulator実行中だけ有効です。
 
 ## 実時間処理の境界
 
@@ -220,8 +309,10 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - Windows実機Bridgeとの有線LAN結合検証
 - mDNS discovery、sender allowlist、HMAC、control channel
 - clock mapping、network jitter、one-way latency推定
-- RealityKitによる3D pose表示
-- TrackerごとのID、role、位置、回転編集
+- Windows Bridgeからの実機Base Station pose受信
+- 1軸・2軸を拘束する3軸gizmo
+- TrackerごとのID、role、回転編集と数値による位置編集
+- 複数段階のUndo/Redo、キーボードによる位置微調整
 - scene保存・読み込み
 - calibration、Recorder / Playback、content配信
 - `.app` bundle、署名、notarization、配布

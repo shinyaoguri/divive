@@ -23,6 +23,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
   public let id: String
   public let role: String
   public let position: Vector3
+  public let orientation: Quaternion
   public let trackingState: TrackingState
   public let trackingReason: TrackingReason
   public let liveness: HubLivenessState
@@ -33,6 +34,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     id = state.latest.pose.trackerID
     role = state.latest.pose.role
     position = state.latest.pose.position
+    orientation = state.latest.pose.orientation
     trackingState = state.trackingState
     trackingReason = state.trackingReason
     liveness = state.liveness
@@ -44,6 +46,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     id: String,
     role: String,
     position: Vector3,
+    orientation: Quaternion,
     trackingState: TrackingState,
     trackingReason: TrackingReason,
     liveness: HubLivenessState,
@@ -53,12 +56,19 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     self.id = id
     self.role = role
     self.position = position
+    self.orientation = orientation
     self.trackingState = trackingState
     self.trackingReason = trackingReason
     self.liveness = liveness
     self.ageMilliseconds = ageMilliseconds
     self.frameSequence = frameSequence
   }
+}
+
+public enum SimulatorWorkspaceAxis: Sendable {
+  case width
+  case height
+  case depth
 }
 
 @MainActor
@@ -79,6 +89,11 @@ public final class HubAppModel: ObservableObject {
   @Published public var reorderingPercent = 0.0
   @Published public var disconnectPercent = 0.0
   @Published public var disconnectDurationMilliseconds = 2_500.0
+  @Published public private(set) var simulatorWorkspace =
+    SimulatorWorkspaceDimensions.default
+  @Published public var clampsSimulatorToWorkspace = true
+  @Published public var showsSimulatorBaseStations = true
+  @Published public private(set) var canUndoSimulatorMove = false
 
   @Published public private(set) var activeSource: HubInputSource?
   @Published public private(set) var isRunning = false
@@ -112,6 +127,10 @@ public final class HubAppModel: ObservableObject {
   private let networkRuntime: NetworkRuntime
   private var previousSample: (source: HubInputSource, monotonicNS: UInt64, generation: UInt64)?
   private var trackerHistoryBuffer = TrackerHistoryBuffer()
+  private var pendingSimulatorMoves: [String: Vector3] = [:]
+  private var simulatorMoveTask: Task<Void, Never>?
+  private var activeSimulatorEdit: SimulatorEdit?
+  private var simulatorUndoEdit: SimulatorEdit?
 
   public init(
     simulatorRuntime: SimulatorRuntime = SimulatorRuntime(),
@@ -123,6 +142,10 @@ public final class HubAppModel: ObservableObject {
 
   public var displayedSource: HubInputSource {
     activeSource ?? selectedSource
+  }
+
+  public var canDirectlyEditSimulator: Bool {
+    activeSource == .simulator && isRunning
   }
 
   public var statusTitle: String {
@@ -184,6 +207,7 @@ public final class HubAppModel: ObservableObject {
 
   public func startSelectedSource() async {
     do {
+      resetSimulatorEditing()
       switch selectedSource {
       case .simulator:
         let configuration = try simulatorConfiguration()
@@ -217,6 +241,7 @@ public final class HubAppModel: ObservableObject {
       case nil:
         return
       }
+      resetSimulatorEditing()
       errorMessage = nil
       await refresh()
     } catch {
@@ -254,6 +279,80 @@ public final class HubAppModel: ObservableObject {
     trackerHistories[trackerID, default: []]
   }
 
+  public func updateSimulatorWorkspace(
+    _ axis: SimulatorWorkspaceAxis,
+    meters: Double
+  ) {
+    do {
+      simulatorWorkspace =
+        switch axis {
+        case .width:
+          try simulatorWorkspace.updating(widthMeters: meters)
+        case .height:
+          try simulatorWorkspace.updating(heightMeters: meters)
+        case .depth:
+          try simulatorWorkspace.updating(depthMeters: meters)
+        }
+      if errorMessage?.hasPrefix("作業空間") == true {
+        errorMessage = nil
+      }
+    } catch {
+      errorMessage =
+        "作業空間は\(SimulatorWorkspaceDimensions.minimumMeters)"
+        + "〜\(SimulatorWorkspaceDimensions.maximumMeters)mで指定してください"
+    }
+  }
+
+  public func beginSimulatorMove(
+    trackerID: String,
+    position: Vector3
+  ) {
+    guard canDirectlyEditSimulator else { return }
+    activeSimulatorEdit = SimulatorEdit(
+      trackerID: trackerID,
+      originalPosition: position,
+      latestPosition: position
+    )
+  }
+
+  public func moveSimulatorTracker(
+    trackerID: String,
+    to position: Vector3
+  ) {
+    guard canDirectlyEditSimulator else { return }
+    if var edit = activeSimulatorEdit, edit.trackerID == trackerID {
+      edit.latestPosition = position
+      activeSimulatorEdit = edit
+    }
+
+    updateTrackerPreview(id: trackerID, position: position)
+    pendingSimulatorMoves[trackerID] = position
+    startSimulatorMoveTaskIfNeeded()
+  }
+
+  public func endSimulatorMove(trackerID: String) {
+    guard let edit = activeSimulatorEdit, edit.trackerID == trackerID else {
+      return
+    }
+    activeSimulatorEdit = nil
+    if edit.originalPosition != edit.latestPosition {
+      simulatorUndoEdit = edit
+      canUndoSimulatorMove = true
+    }
+  }
+
+  public func undoSimulatorMove() {
+    guard canDirectlyEditSimulator, let edit = simulatorUndoEdit else {
+      return
+    }
+    simulatorUndoEdit = nil
+    canUndoSimulatorMove = false
+    moveSimulatorTracker(
+      trackerID: edit.trackerID,
+      to: edit.originalPosition
+    )
+  }
+
   private func simulatorConfiguration() throws -> HubAppConfiguration {
     guard let seed = UInt64(seedText) else {
       throw HubAppInputError.invalidSeed
@@ -271,6 +370,65 @@ public final class HubAppModel: ObservableObject {
       disconnectProbability: disconnectPercent / 100,
       disconnectDurationMilliseconds: disconnectDurationMilliseconds
     )
+  }
+
+  private func updateTrackerPreview(
+    id: String,
+    position: Vector3
+  ) {
+    guard let index = trackers.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    let current = trackers[index]
+    var updated = trackers
+    updated[index] = TrackerDisplayState(
+      id: current.id,
+      role: current.role,
+      position: position,
+      orientation: current.orientation,
+      trackingState: current.trackingState,
+      trackingReason: current.trackingReason,
+      liveness: current.liveness,
+      ageMilliseconds: current.ageMilliseconds,
+      frameSequence: current.frameSequence
+    )
+    publish(updated, to: \.trackers)
+  }
+
+  private func startSimulatorMoveTaskIfNeeded() {
+    guard simulatorMoveTask == nil else { return }
+    simulatorMoveTask = Task { [weak self] in
+      await self?.flushSimulatorMoves()
+    }
+  }
+
+  private func flushSimulatorMoves() async {
+    while !Task.isCancelled, let pending = pendingSimulatorMoves.first {
+      pendingSimulatorMoves.removeValue(forKey: pending.key)
+      do {
+        try await simulatorRuntime.moveTracker(
+          id: pending.key,
+          toDisplayedPosition: pending.value
+        )
+      } catch {
+        errorMessage = "Tracker位置を変更できませんでした: \(error)"
+        pendingSimulatorMoves.removeAll()
+        break
+      }
+    }
+    simulatorMoveTask = nil
+    if !pendingSimulatorMoves.isEmpty {
+      startSimulatorMoveTaskIfNeeded()
+    }
+  }
+
+  private func resetSimulatorEditing() {
+    simulatorMoveTask?.cancel()
+    simulatorMoveTask = nil
+    pendingSimulatorMoves.removeAll()
+    activeSimulatorEdit = nil
+    simulatorUndoEdit = nil
+    canUndoSimulatorMove = false
   }
 
   private func networkConfiguration() throws -> NetworkRuntimeConfiguration {
@@ -414,6 +572,12 @@ public final class HubAppModel: ObservableObject {
     guard self[keyPath: keyPath] != value else { return }
     self[keyPath: keyPath] = value
   }
+}
+
+private struct SimulatorEdit: Sendable {
+  let trackerID: String
+  let originalPosition: Vector3
+  var latestPosition: Vector3
 }
 
 public enum HubAppInputError: Error, Equatable, Sendable,

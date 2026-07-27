@@ -1,6 +1,7 @@
 import Dispatch
 import Foundation
 import HubCore
+import HubProtocol
 import HubSimulator
 
 public struct SimulatorRuntimeMetrics: Equatable, Sendable {
@@ -18,6 +19,10 @@ public struct SimulatorRuntimeSnapshot: Sendable {
   public let monotonicNS: UInt64
   public let metrics: SimulatorRuntimeMetrics
   public let hubState: EvaluatedHubStateSnapshot
+}
+
+public enum SimulatorRuntimeError: Error, Equatable, Sendable {
+  case notStarted
 }
 
 /// GUIのMainActorから姿勢生成を分離する実時間scheduler。
@@ -66,6 +71,20 @@ public actor SimulatorRuntime {
     runTask?.cancel()
     runTask = nil
     isRunning = false
+  }
+
+  public func moveTracker(
+    id: String,
+    toDisplayedPosition position: Vector3
+  ) throws {
+    guard var currentSimulator = simulator else {
+      throw SimulatorRuntimeError.notStarted
+    }
+    try currentSimulator.moveTracker(
+      id: id,
+      toDisplayedPosition: position
+    )
+    simulator = currentSimulator
   }
 
   public func snapshot() -> SimulatorRuntimeSnapshot {

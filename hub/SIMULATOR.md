@@ -172,16 +172,22 @@ case .dropped:
 ```
 
 `addTracker`、`updateTracker`、`removeTracker`でsceneを編集できます。更新時に新しい
-Tracker IDを指定するとrenameになります。空ID、重複ID、非有限pose、非正規化
-Quaternion、各motionの負値・非有限値・0以下の周波数は拒否します。
+Tracker IDを指定するとrenameになります。`moveTracker(id:toDisplayedPosition:)`は
+最新stepで見えている位置を指定位置へ合わせるようbase poseを移し、既存motionの種類と
+位相進行を維持します。空ID、重複ID、非有限pose、非正規化Quaternion、各motionの
+負値・非有限値・0以下の周波数は拒否します。
 
 ## 今回含まないもの
 
-- GUIからの数値編集とscene永続化
+- GUIからのID、role、回転の編集とscene永続化
 - fault scriptの保存・読み込み
 - WebSocket、Unityなど外部contentへの配信
 
 SwiftUIの開発用GUIは[GUI.md](GUI.md)でHeadless APIへ接続し、UDP Network sourceと
-切り替えられます。現在の空間表示は上面図であり、3D表示と個別Tracker編集は後続範囲
-です。次段階ではRecorder / Playbackまたはcontent向け配信を同じHub入力境界へ
-接続します。
+切り替えられます。macOS 15以降ではRealityKit 3D表示でQuaternionのlocal -Z前方を
+確認できます。方向cube、turntable orbit、pan、zoom、作業空間の全体表示で視点を
+操作し、3Dの画面平面または上面・正面・側面の直交表示から個別TrackerのXYZ位置を
+マウス編集できます。Simulator時は仮想Base Station 2台も表示できますが、
+静的なGUI参照物であり`SimulatorEngine`のTracker poseには含めません。
+1軸・2軸を拘束する3軸gizmoは後続範囲です。次段階ではRecorder / Playbackまたは
+content向け配信を同じHub入力境界へ接続します。

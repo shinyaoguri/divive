@@ -202,6 +202,107 @@ final class SimulatorEngineTests: XCTestCase {
     XCTAssertEqual(simulator.frameSequence, 2)
   }
 
+  func test表示中の静止Trackerを指定位置へ移動する() throws {
+    var simulator = try SimulatorEngine(
+      source: try source(rate: .hz90),
+      trackers: [
+        tracker(
+          "movable",
+          role: "prop",
+          position: Vector3(x: 1, y: 2, z: -3)
+        )
+      ]
+    )
+    _ = try simulator.step(receivedMonotonicNS: 10)
+
+    let target = Vector3(x: -4, y: 1.5, z: 6)
+    try simulator.moveTracker(
+      id: "movable",
+      toDisplayedPosition: target
+    )
+
+    let moved = try emitted(
+      simulator.step(receivedMonotonicNS: 20)
+    ).poseBatch.trackers[0]
+    XCTAssertEqual(moved.position, target)
+    XCTAssertEqual(
+      simulator.trackerConfigurations[0].position,
+      target
+    )
+  }
+
+  func test移動後もmotionPresetと現在の軌道位相を維持する() throws {
+    let motion = SimulatorMotionPreset.circle(
+      radiusMeters: 2,
+      angularSpeedRadiansPerSecond: 2 * .pi,
+      phaseRadians: 0
+    )
+    var simulator = try SimulatorEngine(
+      source: try source(rate: .hz120),
+      trackers: [
+        SimulatorTrackerConfiguration(
+          trackerID: "circle",
+          role: "prop",
+          position: Vector3(x: 1, y: 2, z: -3),
+          motion: motion
+        )
+      ]
+    )
+    _ = try simulator.step(receivedMonotonicNS: 10)
+
+    let target = Vector3(x: 10, y: 2, z: -4)
+    try simulator.moveTracker(
+      id: "circle",
+      toDisplayedPosition: target
+    )
+
+    let configuration = try XCTUnwrap(
+      simulator.trackerConfigurations.first
+    )
+    XCTAssertEqual(configuration.motion, motion)
+    XCTAssertEqual(
+      configuration.position,
+      Vector3(x: 8, y: 2, z: -4)
+    )
+
+    let next = try emitted(
+      simulator.step(receivedMonotonicNS: 20)
+    ).poseBatch.trackers[0]
+    XCTAssertEqual(next.position.y, target.y, accuracy: 1e-5)
+    XCTAssertEqual(next.position.x, target.x, accuracy: 0.01)
+    XCTAssertEqual(next.position.z, target.z, accuracy: 0.11)
+  }
+
+  func test存在しないTrackerと非有限位置への移動を拒否する() throws {
+    var simulator = try SimulatorEngine(
+      source: try source(),
+      trackers: [tracker("movable")]
+    )
+
+    XCTAssertThrowsError(
+      try simulator.moveTracker(
+        id: "missing",
+        toDisplayedPosition: Vector3(x: 0, y: 0, z: 0)
+      )
+    ) { error in
+      XCTAssertEqual(
+        error as? SimulatorConfigurationError,
+        .trackerNotFound("missing")
+      )
+    }
+    XCTAssertThrowsError(
+      try simulator.moveTracker(
+        id: "movable",
+        toDisplayedPosition: Vector3(x: .nan, y: 0, z: 0)
+      )
+    ) { error in
+      XCTAssertEqual(
+        error as? SimulatorConfigurationError,
+        .nonFinitePose("movable")
+      )
+    }
+  }
+
   func testCircleは固定step時刻から位置と速度を生成する() throws {
     var simulator = try SimulatorEngine(
       source: try source(rate: .hz120),

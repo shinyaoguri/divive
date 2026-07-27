@@ -199,6 +199,50 @@ final class HubAppConfigurationTests: XCTestCase {
     )
   }
 
+  func testRuntime実行中にTrackerの表示位置を変更できる() async throws {
+    let runtime = SimulatorRuntime()
+    try await runtime.start(
+      configuration: configuration(
+        trackerCount: 1,
+        rate: .hz120,
+        motion: .stationary
+      )
+    )
+    try await Task.sleep(for: .milliseconds(30))
+    let before = await runtime.snapshot()
+    let trackerID = try XCTUnwrap(
+      before.hubState.trackers.first?.latest.pose.trackerID
+    )
+    let target = Vector3(x: 5, y: 2, z: -7)
+
+    try await runtime.moveTracker(
+      id: trackerID,
+      toDisplayedPosition: target
+    )
+    try await Task.sleep(for: .milliseconds(30))
+
+    let after = await runtime.snapshot()
+    let position = try XCTUnwrap(
+      after.hubState.trackers.first?.latest.pose.position
+    )
+    XCTAssertEqual(position, target)
+    await runtime.stop()
+  }
+
+  func testRuntime開始前のTracker移動を拒否する() async {
+    let runtime = SimulatorRuntime()
+
+    do {
+      try await runtime.moveTracker(
+        id: "missing",
+        toDisplayedPosition: Vector3(x: 0, y: 0, z: 0)
+      )
+      XCTFail("開始前の移動が成功しました")
+    } catch {
+      XCTAssertEqual(error as? SimulatorRuntimeError, .notStarted)
+    }
+  }
+
   private func configuration(
     trackerCount: Int,
     rate: SimulatorRate = .hz90,

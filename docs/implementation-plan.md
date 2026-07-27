@@ -233,7 +233,13 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 - [ ] Windows実機BridgeとのGUI結合
 - [x] Simulator Tracker一覧
 - [x] X / -Z上面図
-- [ ] RealityKitによる3D pose表示
+- [x] 上面・正面・側面の直交投影によるSimulator XYZマウス操作
+- [x] 0.25〜1,000mの有限作業空間、自動fit、境界clamp、単一Undo
+- [x] RealityKitによる3D pose、Quaternion方向軸、camera orbit表示
+- [x] 方向cube、左drag orbit、中button pan、wheel / 2本指zoom、
+  作業空間の全体表示
+- [x] 3D空間での視点平面に沿ったTracker直接移動
+- [ ] 1軸・2軸を拘束する3軸gizmo
 - [x] tracking、lost、disconnected、simulated
 - [x] Simulator rate、frame loss、delay、jitter、reordering、disconnect、
   age、deadline miss
@@ -301,6 +307,15 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] frame loss、tracking lost
 - [x] delay、jitter、reordering、disconnect
 - [x] `HubFrameSink`による実機正規化後と同じHub input interface
+- [x] GUIからmotionを維持したままbase poseを移動
+- [x] 上面・正面・側面のマウス操作でXYZ全方向を編集
+- [x] 幅・高さ・奥行きが独立した有限作業空間と自動fit
+- [x] perspective 3D表示、Quaternionのlocal -Z前方、camera orbit
+- [x] Unity / Blender型の方向cube、pan、zoom、作業空間の全体表示
+- [x] 仮想Base Station 2台の3D・直交表示と表示切替
+- [x] 3D視点平面での直接位置編集、作業空間clamp、単一Undo
+- [ ] 1軸・2軸を拘束する3軸gizmo
+- [ ] scene保存、複数Undo/Redo、キーボード微調整
 
 ### F2. Calibration
 
