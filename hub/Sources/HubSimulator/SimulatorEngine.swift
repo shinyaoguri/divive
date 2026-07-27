@@ -236,6 +236,50 @@ public struct SimulatorEngine: Sendable {
     trackers[configuration.trackerID] = configuration
   }
 
+  /// 最新stepで表示されている姿勢を指定位置へ移し、motionの中心となるbase poseを更新する。
+  ///
+  /// motion preset自体は止めない。drag中も軌道を継続しながら、見えているTrackerが
+  /// pointer位置へ追従するよう現在のmotion offsetをbase poseへ反映する。
+  public mutating func moveTracker(
+    id: String,
+    toDisplayedPosition target: Vector3
+  ) throws {
+    guard let configuration = trackers[id] else {
+      throw SimulatorConfigurationError.trackerNotFound(id)
+    }
+    guard target.isFinite else {
+      throw SimulatorConfigurationError.nonFinitePose(id)
+    }
+
+    let latestSequence = nextFrameSequence == 0 ? 0 : nextFrameSequence - 1
+    let simulationTime =
+      Double(latestSequence) / Double(source.rate.rawValue)
+    let displayed = resolveMotion(
+      configuration,
+      simulationTime: simulationTime
+    ).position
+    let newBasePosition = Vector3(
+      x: configuration.position.x + target.x - displayed.x,
+      y: configuration.position.y + target.y - displayed.y,
+      z: configuration.position.z + target.z - displayed.z
+    )
+
+    try updateTracker(
+      existingID: id,
+      configuration: SimulatorTrackerConfiguration(
+        trackerID: configuration.trackerID,
+        role: configuration.role,
+        position: newBasePosition,
+        orientation: configuration.orientation,
+        motion: configuration.motion,
+        trackingState: configuration.trackingState,
+        trackingReason: configuration.trackingReason,
+        connected: configuration.connected,
+        deviceMetadataRevision: configuration.deviceMetadataRevision
+      )
+    )
+  }
+
   @discardableResult
   public mutating func removeTracker(
     id: String

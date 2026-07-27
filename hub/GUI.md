@@ -50,7 +50,8 @@ macOSの運用コンソールとして、空間の動きと異常の発見を主
 - メニューバー: ウィンドウを閉じても継続する状態監視と最小限の復旧操作
 - ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、開始または停止、
   右端の現在Source設定
-- ライブ空間: X / -Z上面プレビューと、Source状態、更新レート、Tracker数
+- ライブ空間: 上面・正面・側面の直交プレビューと、Source状態、更新レート、
+  Tracker数、Simulator直接操作
 - 右インスペクタ上部: 最大16台のTracker一覧
 - 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
 - 右インスペクタ中央: 選択したTrackerの直近6秒の位置推移
@@ -138,12 +139,38 @@ Sourceを開始または切り替えた時点で履歴と累積値の基準をre
 - 隣接frameのreordering: 0〜100%
 - disconnect開始確率と継続時間
 - Simulatorの開始、設定を反映した再起動、停止
-- Tracker数が増えても、初期位置を±2mプレビュー内へ収める自動間隔
+- Tracker数が増えても、初期位置を既定の4m幅へ収める自動間隔
+- 上面・正面・側面を切り替えたマウスドラッグによるXYZ位置編集
+- 幅・高さ・奥行きを個別指定する0.25〜1,000mの作業空間と自動fit
+- 作業空間への位置制限、直前の移動のUndo
 
 設定は「開始」または「設定を反映」を押した時点で反映します。seedを含む
 設定が同一なら、Headless Simulatorのmotionとfault列も同一です。delay、
 jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipelineで処理し、
 実運用と同じHubのstale / liveness判定へ渡します。
+
+### Trackerのマウス操作
+
+Simulatorを開始し、ライブ空間のTrackerをドラッグすると、選択中の投影面に対応する
+2軸を直接変更できます。
+
+| 表示 | 画面右 | 画面上 | 保持する軸 |
+| --- | --- | --- | --- |
+| 上面 | +X | -Z | Y |
+| 正面 | +X | +Y | Z |
+| 側面 | -Z | +Y | X |
+
+例えば上面でX/Zを決めてから正面または側面へ切り替えれば、マウスだけでXYZすべてを
+設定できます。ドラッグ開始時のポインタとTrackerのずれを保つため、選択時にTrackerが
+ポインタへ飛びません。Trackerのmotion presetは停止せず、現在見えている位置が
+ポインタへ来るようmotionのbase poseを移動します。移動はSimulatorを再起動するまで
+有効で、直前のドラッグだけは上部のUndoボタンで取り消せます。
+
+作業空間ボタンでは幅X、高さY、奥行きZを個別に指定できます。X/Zは原点中心、Yは
+床面0mから上方向の有限空間として扱い、縦横比を保ってプレビュー内へ自動fitします。
+「Trackerを作業空間内に制限」が有効なら、ドラッグ位置を各境界でclampします。
+無効にすると範囲外へも移動できますが、範囲外のTrackerはプレビューに見えなくなる
+場合があります。
 
 ## UDP受信
 
@@ -176,7 +203,8 @@ sender allowlistがないため、信頼できるprivate LANでのみ使って�
 
 - Hub latest stateの実測更新レート
 - Hubへ入力したTracker数と全体の追跡状態
-- X / -Z上面図。表示範囲は原点から±2m
+- X/-Z上面、X/Y正面、-Z/Y側面の直交プレビュー
+- 作業空間に応じた可変gridと全体の自動fit
 - 全Trackerのrole、実効tracking state、receive age
 - 選択Trackerの恒久IDとX / Y / Z位置
 
@@ -194,8 +222,9 @@ Simulatorでは生成drop、接続断、overflow、staleになった順序逆転
 受信処理時間はWindowsからMacへのone-way latencyではありません。BridgeとHubの
 monotonic clock mappingが未実装のため、captureから受信までの遅延はまだ断定しません。
 
-上面図は内部共通座標のXを画面右、-Zを画面上として表示します。これはコンテンツ用の
-2D座標変換ではなく、Tracker Spaceの簡易診断表示です。
+各投影は内部共通座標をそのまま使う診断・Simulator編集表示です。コンテンツ用の
+2D座標変換やcalibration profileではありません。UDP受信中も同じ投影で確認できますが、
+実機姿勢を誤って変更しないよう直接操作はSimulator実行中だけ有効です。
 
 ## 実時間処理の境界
 
@@ -220,8 +249,9 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - Windows実機Bridgeとの有線LAN結合検証
 - mDNS discovery、sender allowlist、HMAC、control channel
 - clock mapping、network jitter、one-way latency推定
-- RealityKitによる3D pose表示
-- TrackerごとのID、role、位置、回転編集
+- RealityKitによるperspective 3D表示、camera orbit、3軸gizmo
+- TrackerごとのID、role、回転編集と数値による位置編集
+- 複数段階のUndo/Redo、キーボードによる位置微調整
 - scene保存・読み込み
 - calibration、Recorder / Playback、content配信
 - `.app` bundle、署名、notarization、配布

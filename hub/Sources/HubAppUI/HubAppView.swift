@@ -273,7 +273,7 @@ private struct HubWorkspace: View {
     HSplitView {
       SpatialStage(
         model: model,
-        selectedTrackerID: selectedTrackerID ?? model.trackers.first?.id
+        selectedTrackerID: $selectedTrackerID
       )
       .frame(minWidth: 690)
       .layoutPriority(1)
@@ -290,14 +290,29 @@ private struct HubWorkspace: View {
 
 private struct SpatialStage: View {
   @ObservedObject var model: HubAppModel
-  let selectedTrackerID: String?
+  @Binding var selectedTrackerID: String?
+  @State private var projection: SimulatorStageProjection = .top
+  @State private var showsWorkspaceSettings = false
+
+  private var effectiveSelectedTrackerID: String? {
+    selectedTrackerID ?? model.trackers.first?.id
+  }
 
   var body: some View {
     ZStack {
-      TrackerTopDownView(
+      TrackerProjectionView(
         trackers: model.trackers,
-        source: model.displayedSource,
-        selectedTrackerID: selectedTrackerID
+        projection: projection,
+        workspace: model.simulatorWorkspace,
+        selectedTrackerID: Binding(
+          get: { effectiveSelectedTrackerID },
+          set: { selectedTrackerID = $0 }
+        ),
+        isEditable: model.canDirectlyEditSimulator,
+        clampsToWorkspace: model.clampsSimulatorToWorkspace,
+        onMoveBegan: model.beginSimulatorMove,
+        onMoveChanged: model.moveSimulatorTracker,
+        onMoveEnded: model.endSimulatorMove
       )
       .accessibilityIdentifier("tracker-space-preview")
 
@@ -305,7 +320,11 @@ private struct SpatialStage: View {
         HStack(alignment: .top) {
           StageStatusPill(model: model)
           Spacer()
-          CoordinateLegend()
+          StageControls(
+            model: model,
+            projection: $projection,
+            showsWorkspaceSettings: $showsWorkspaceSettings
+          )
         }
 
         Spacer()
@@ -393,18 +412,134 @@ private struct StageStatusPill: View {
   }
 }
 
-private struct CoordinateLegend: View {
+private struct StageControls: View {
+  @ObservedObject var model: HubAppModel
+  @Binding var projection: SimulatorStageProjection
+  @Binding var showsWorkspaceSettings: Bool
+
   var body: some View {
-    Text("X →   −Z ↑   ±2 m")
-      .font(.caption.monospaced())
-      .foregroundStyle(.secondary)
-      .padding(.horizontal, 10)
-      .frame(height: 30)
-      .background(
-        Color(nsColor: .controlBackgroundColor).opacity(0.82),
-        in: Capsule()
+    HStack(spacing: 8) {
+      Picker("表示方向", selection: $projection) {
+        ForEach(SimulatorStageProjection.allCases) { projection in
+          Text(projection.displayName).tag(projection)
+        }
+      }
+      .labelsHidden()
+      .pickerStyle(.segmented)
+      .frame(width: 164)
+
+      Divider()
+        .frame(height: 18)
+
+      Text(projection.axisDescription)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .frame(minWidth: 76)
+
+      Button {
+        model.undoSimulatorMove()
+      } label: {
+        Label("移動を取り消す", systemImage: "arrow.uturn.backward")
+          .labelStyle(.iconOnly)
+      }
+      .buttonStyle(.borderless)
+      .disabled(!model.canUndoSimulatorMove)
+      .help("直前のTracker移動を取り消す")
+
+      Button {
+        showsWorkspaceSettings = true
+      } label: {
+        Label("作業空間", systemImage: "view.3d")
+          .labelStyle(.iconOnly)
+      }
+      .buttonStyle(.borderless)
+      .help("表示する作業空間の広さ")
+      .popover(
+        isPresented: $showsWorkspaceSettings,
+        arrowEdge: .top
+      ) {
+        SimulatorWorkspaceSettings(model: model)
+      }
+    }
+    .padding(.horizontal, 10)
+    .frame(height: 34)
+    .background(.regularMaterial, in: Capsule())
+    .accessibilityElement(children: .contain)
+  }
+}
+
+private struct SimulatorWorkspaceSettings: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text("作業空間")
+          .font(.headline)
+        Text("全体が画面へ収まるよう自動調整します。")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Grid(alignment: .trailing, horizontalSpacing: 10, verticalSpacing: 9) {
+        workspaceRow(
+          "幅 X",
+          axis: .width,
+          value: model.simulatorWorkspace.widthMeters
+        )
+        workspaceRow(
+          "高さ Y",
+          axis: .height,
+          value: model.simulatorWorkspace.heightMeters
+        )
+        workspaceRow(
+          "奥行き Z",
+          axis: .depth,
+          value: model.simulatorWorkspace.depthMeters
+        )
+      }
+
+      Toggle(
+        "Trackerを作業空間内に制限",
+        isOn: $model.clampsSimulatorToWorkspace
       )
-      .accessibilityLabel("表示範囲は前後左右2メートル")
+      .font(.caption)
+
+      Text(
+        "\(SimulatorWorkspaceDimensions.minimumMeters)"
+          + "〜\(SimulatorWorkspaceDimensions.maximumMeters)m"
+      )
+      .font(.caption2.monospacedDigit())
+      .foregroundStyle(.tertiary)
+    }
+    .padding(18)
+    .frame(width: 270)
+  }
+
+  private func workspaceRow(
+    _ title: String,
+    axis: SimulatorWorkspaceAxis,
+    value: Double
+  ) -> some View {
+    GridRow {
+      Text(title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      TextField(
+        title,
+        value: Binding(
+          get: { value },
+          set: { model.updateSimulatorWorkspace(axis, meters: $0) }
+        ),
+        format: .number.precision(.fractionLength(0...2))
+      )
+      .textFieldStyle(.roundedBorder)
+      .multilineTextAlignment(.trailing)
+      .frame(width: 92)
+      Text("m")
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+    }
   }
 }
 
@@ -1371,18 +1506,44 @@ private struct ErrorBanner: View {
   }
 }
 
-private struct TrackerTopDownView: View {
+private struct TrackerProjectionView: View {
   let trackers: [TrackerDisplayState]
-  let source: HubInputSource
-  let selectedTrackerID: String?
-  private let visibleHalfRange = 2.0
+  let projection: SimulatorStageProjection
+  let workspace: SimulatorWorkspaceDimensions
+  @Binding var selectedTrackerID: String?
+  let isEditable: Bool
+  let clampsToWorkspace: Bool
+  let onMoveBegan: (String, Vector3) -> Void
+  let onMoveChanged: (String, Vector3) -> Void
+  let onMoveEnded: (String) -> Void
+  @State private var dragState: TrackerDragState?
 
   var body: some View {
-    Canvas { context, size in
-      drawGrid(context: &context, size: size)
-      for tracker in trackers {
-        draw(tracker, context: &context, size: size)
+    GeometryReader { geometry in
+      let transform = SimulatorStageTransform(
+        projection: projection,
+        workspace: workspace,
+        size: geometry.size
+      )
+
+      Canvas { context, size in
+        drawGrid(
+          context: &context,
+          transform: transform
+        )
+        for tracker in trackers {
+          draw(
+            displayedTracker(tracker),
+            context: &context,
+            transform: transform
+          )
+        }
       }
+      .contentShape(Rectangle())
+      .gesture(
+        dragGesture(transform: transform),
+        including: isEditable ? .all : .none
+      )
     }
     .background {
       ZStack {
@@ -1398,26 +1559,41 @@ private struct TrackerTopDownView: View {
         )
       }
     }
+    .help(
+      isEditable
+        ? "Trackerをドラッグして\(projection.displayName)の2軸を移動"
+        : "直接操作はSimulator実行中のみ利用できます"
+    )
   }
 
   private func drawGrid(
     context: inout GraphicsContext,
-    size: CGSize
+    transform: SimulatorStageTransform
   ) {
-    let center = CGPoint(x: size.width / 2, y: size.height / 2)
-    let scale = min(size.width, size.height) / (visibleHalfRange * 2)
+    let plotRect = transform.plotRect
     var grid = Path()
 
-    for meter in -2...2 {
-      let offset = CGFloat(meter) * scale
-      grid.move(to: CGPoint(x: center.x + offset, y: 0))
-      grid.addLine(
-        to: CGPoint(x: center.x + offset, y: size.height)
-      )
-      grid.move(to: CGPoint(x: 0, y: center.y + offset))
-      grid.addLine(
-        to: CGPoint(x: size.width, y: center.y + offset)
-      )
+    for value in gridValues(
+      in: transform.horizontalRange,
+      step: transform.gridStepMeters
+    ) {
+      let x =
+        plotRect.minX
+        + CGFloat(value - transform.horizontalRange.lowerBound)
+        * transform.scale
+      grid.move(to: CGPoint(x: x, y: plotRect.minY))
+      grid.addLine(to: CGPoint(x: x, y: plotRect.maxY))
+    }
+    for value in gridValues(
+      in: transform.verticalRange,
+      step: transform.gridStepMeters
+    ) {
+      let y =
+        plotRect.maxY
+        - CGFloat(value - transform.verticalRange.lowerBound)
+        * transform.scale
+      grid.move(to: CGPoint(x: plotRect.minX, y: y))
+      grid.addLine(to: CGPoint(x: plotRect.maxX, y: y))
     }
 
     context.stroke(
@@ -1426,30 +1602,56 @@ private struct TrackerTopDownView: View {
       lineWidth: 1
     )
 
+    context.stroke(
+      Path(roundedRect: plotRect, cornerRadius: 2),
+      with: .color(.secondary.opacity(0.18)),
+      lineWidth: 1
+    )
+
     var axes = Path()
-    axes.move(to: CGPoint(x: center.x, y: 0))
-    axes.addLine(to: CGPoint(x: center.x, y: size.height))
-    axes.move(to: CGPoint(x: 0, y: center.y))
-    axes.addLine(to: CGPoint(x: size.width, y: center.y))
+    if transform.horizontalRange.contains(0) {
+      let x =
+        plotRect.minX
+        + CGFloat(-transform.horizontalRange.lowerBound)
+        * transform.scale
+      axes.move(to: CGPoint(x: x, y: plotRect.minY))
+      axes.addLine(to: CGPoint(x: x, y: plotRect.maxY))
+    }
+    if transform.verticalRange.contains(0) {
+      let y =
+        plotRect.maxY
+        + CGFloat(transform.verticalRange.lowerBound)
+        * transform.scale
+      axes.move(to: CGPoint(x: plotRect.minX, y: y))
+      axes.addLine(to: CGPoint(x: plotRect.maxX, y: y))
+    }
     context.stroke(
       axes,
       with: .color(.secondary.opacity(0.28)),
       lineWidth: 1.5
+    )
+
+    let label = String(
+      format: "grid %.3g m",
+      transform.gridStepMeters
+    )
+    context.draw(
+      Text(label)
+        .font(.caption2.monospaced())
+        .foregroundStyle(.tertiary),
+      at: CGPoint(x: plotRect.minX, y: plotRect.maxY + 10),
+      anchor: .topLeading
     )
   }
 
   private func draw(
     _ tracker: TrackerDisplayState,
     context: inout GraphicsContext,
-    size: CGSize
+    transform: SimulatorStageTransform
   ) {
-    let center = CGPoint(x: size.width / 2, y: size.height / 2)
-    let scale = min(size.width, size.height) / (visibleHalfRange * 2)
-    let point = CGPoint(
-      x: center.x + CGFloat(tracker.position.x) * scale,
-      y: center.y + CGFloat(tracker.position.z) * scale
-    )
+    let point = transform.point(for: tracker.position)
     let isSelected = selectedTrackerID == tracker.id
+    let isDragging = dragState?.trackerID == tracker.id
     let diameter: CGFloat = isSelected ? 20 : 14
     let marker = CGRect(
       x: point.x - diameter / 2,
@@ -1459,10 +1661,17 @@ private struct TrackerTopDownView: View {
     )
 
     if isSelected {
+      drawAxisGuides(
+        context: &context,
+        point: point,
+        isDragging: isDragging
+      )
       let halo = marker.insetBy(dx: -7, dy: -7)
       context.fill(
         Path(ellipseIn: halo),
-        with: .color(Color.accentColor.opacity(0.15))
+        with: .color(
+          Color.accentColor.opacity(isDragging ? 0.24 : 0.15)
+        )
       )
     }
 
@@ -1485,6 +1694,162 @@ private struct TrackerTopDownView: View {
       )
     }
   }
+
+  private func drawAxisGuides(
+    context: inout GraphicsContext,
+    point: CGPoint,
+    isDragging: Bool
+  ) {
+    let length: CGFloat = isDragging ? 30 : 22
+    var horizontal = Path()
+    horizontal.move(to: CGPoint(x: point.x - length, y: point.y))
+    horizontal.addLine(to: CGPoint(x: point.x + length, y: point.y))
+    context.stroke(
+      horizontal,
+      with: .color(horizontalAxisColor.opacity(isDragging ? 0.9 : 0.55)),
+      lineWidth: isDragging ? 2.5 : 1.5
+    )
+
+    var vertical = Path()
+    vertical.move(to: CGPoint(x: point.x, y: point.y - length))
+    vertical.addLine(to: CGPoint(x: point.x, y: point.y + length))
+    context.stroke(
+      vertical,
+      with: .color(verticalAxisColor.opacity(isDragging ? 0.9 : 0.55)),
+      lineWidth: isDragging ? 2.5 : 1.5
+    )
+  }
+
+  private var horizontalAxisColor: Color {
+    switch projection {
+    case .top, .front: .red
+    case .side: .blue
+    }
+  }
+
+  private var verticalAxisColor: Color {
+    switch projection {
+    case .top: .blue
+    case .front, .side: .green
+    }
+  }
+
+  private func displayedTracker(
+    _ tracker: TrackerDisplayState
+  ) -> TrackerDisplayState {
+    guard let dragState, dragState.trackerID == tracker.id else {
+      return tracker
+    }
+    return TrackerDisplayState(
+      id: tracker.id,
+      role: tracker.role,
+      position: dragState.latestPosition,
+      trackingState: tracker.trackingState,
+      trackingReason: tracker.trackingReason,
+      liveness: tracker.liveness,
+      ageMilliseconds: tracker.ageMilliseconds,
+      frameSequence: tracker.frameSequence
+    )
+  }
+
+  private func dragGesture(
+    transform: SimulatorStageTransform
+  ) -> some Gesture {
+    DragGesture(minimumDistance: 0, coordinateSpace: .local)
+      .onChanged { value in
+        if dragState == nil {
+          guard
+            let tracker = hitTest(
+              at: value.startLocation,
+              transform: transform
+            )
+          else {
+            return
+          }
+          selectedTrackerID = tracker.id
+          dragState = TrackerDragState(
+            trackerID: tracker.id,
+            originalPosition: tracker.position,
+            latestPosition: tracker.position
+          )
+          onMoveBegan(tracker.id, tracker.position)
+        }
+
+        guard var dragState else { return }
+        let didMove =
+          abs(value.translation.width) > 0.1
+          || abs(value.translation.height) > 0.1
+        guard didMove else { return }
+
+        let originalPoint = transform.point(
+          for: dragState.originalPosition
+        )
+        let targetPoint = CGPoint(
+          x: originalPoint.x + value.translation.width,
+          y: originalPoint.y + value.translation.height
+        )
+        let position = transform.position(
+          at: targetPoint,
+          preserving: dragState.originalPosition,
+          clampsToWorkspace: clampsToWorkspace
+        )
+        dragState.latestPosition = position
+        self.dragState = dragState
+        onMoveChanged(dragState.trackerID, position)
+      }
+      .onEnded { _ in
+        guard let dragState else { return }
+        onMoveEnded(dragState.trackerID)
+        self.dragState = nil
+      }
+  }
+
+  private func hitTest(
+    at point: CGPoint,
+    transform: SimulatorStageTransform
+  ) -> TrackerDisplayState? {
+    trackers
+      .map { tracker in
+        (
+          tracker: tracker,
+          distance: hypot(
+            transform.point(for: tracker.position).x - point.x,
+            transform.point(for: tracker.position).y - point.y
+          )
+        )
+      }
+      .filter { $0.distance <= 22 }
+      .sorted {
+        if $0.distance == $1.distance {
+          return $0.tracker.id == selectedTrackerID
+        }
+        return $0.distance < $1.distance
+      }
+      .first?
+      .tracker
+  }
+
+  private func gridValues(
+    in range: ClosedRange<Double>,
+    step: Double
+  ) -> [Double] {
+    guard step.isFinite, step > 0 else { return [] }
+    var value = ceil(range.lowerBound / step) * step
+    var values: [Double] = []
+    while value <= range.upperBound + step * 0.000_001,
+      values.count < 200
+    {
+      values.append(abs(value) < step * 0.000_001 ? 0 : value)
+      value += step
+    }
+    return values
+  }
+}
+
+private struct TrackerDragState {
+  let trackerID: String
+  let originalPosition: Vector3
+  var latestPosition: Vector3
 }
 
 extension HubInputSource {

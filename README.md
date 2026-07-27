@@ -123,7 +123,8 @@ ageに基づくlost / disconnected評価、CLI診断まで実装済みです。W
 Hub入力へ供給します。
 
 [Mac Hub GUI](hub/GUI.md)はUDP Network sourceとHeadless Simulatorを切り替え、
-姿勢を上面図と一覧で確認できます。現段階では開発用実行形式です。
+姿勢を上面・正面・側面と一覧で確認できます。Simulator実行中は、任意の有限作業空間を
+自動fitしながらTrackerのXYZ位置をマウス操作できます。現段階では開発用実行形式です。
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
