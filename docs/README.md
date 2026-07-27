@@ -4,6 +4,9 @@
 
 ## 読む順番
 
+別端末や別agentから開発を再開する場合は、最初に
+[開発引き継ぎ](handoff.md)を読んでください。通常の設計確認は次の順です。
+
 1. [Requirements](requirements.md)
 2. [Architecture](architecture.md)
 3. [Hardware Validation](hardware-validation.md)
@@ -17,6 +20,7 @@
 
 | 文書 | 責務 |
 | --- | --- |
+| [Handoff](handoff.md) | 現在地、未完了事項、別端末・別agentへの再開手順 |
 | [Requirements](requirements.md) | 機能・非機能要求、前提、traceability |
 | [Architecture](architecture.md) | システム境界、責務、データフロー、障害時挙動 |
 | [Implementation Plan](implementation-plan.md) | 作業順序、依存関係、各PhaseのExit Criteria |
