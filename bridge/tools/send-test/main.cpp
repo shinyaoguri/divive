@@ -1,5 +1,6 @@
 #include "divive/bridge/pose_sender.hpp"
 #include "divive/bridge/sender_options.hpp"
+#include "divive/bridge/uuid.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -8,7 +9,6 @@
 #include <cstdint>
 #include <iostream>
 #include <numbers>
-#include <random>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -26,18 +26,6 @@ volatile std::sig_atomic_t running = 1;
 
 void stop_handler(int) {
     running = 0;
-}
-
-[[nodiscard]] UuidBytes random_uuid() {
-    std::random_device source;
-    UuidBytes result{};
-    for (auto& value : result) {
-        value = static_cast<std::byte>(source() & 0xFFU);
-    }
-    // RFC 4122 version 4、variant 1。
-    result[6] = (result[6] & std::byte{0x0F}) | std::byte{0x40};
-    result[8] = (result[8] & std::byte{0x3F}) | std::byte{0x80};
-    return result;
 }
 
 [[nodiscard]] PoseBatch make_frame(const std::size_t tracker_count,
@@ -112,9 +100,9 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, stop_handler);
 
     divive::protocol::Envelope envelope;
-    envelope.session_id = random_uuid();
-    envelope.bridge_id = random_uuid();
-    const auto tracking_space_id = random_uuid();
+    envelope.session_id = divive::bridge::generate_random_uuid();
+    envelope.bridge_id = divive::bridge::generate_random_uuid();
+    const auto tracking_space_id = divive::bridge::generate_random_uuid();
 
     divive::bridge::PoseSender sender;
     const auto started = sender.start({

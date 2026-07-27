@@ -16,7 +16,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] macOSでOpenVR非依存coreをbuild/test
 - [x] Windows x64 build用CIとartifact作成
 - [x] Tracker 3.0をWindows実機でH0列挙・60秒pose取得
-- [ ] 改良ProbeでH0.5 timing / pose qualityを実行
+- [x] 改良ProbeでH0.5 timing / pose qualityを実行
 - [ ] Windows実機でH1の30分×3回を実行
 - [ ] Ultimate実機でH2を実行
 - [ ] 実機結果に基づくA3 backend decision
@@ -34,6 +34,7 @@ MVPの成功は「すべてのSDKが揃うこと」ではなく、次のvertical
 - [x] seed付きframe loss / tracking lost
 - [x] SwiftUI Simulator GUIの開始・停止、上面図、Tracker一覧、基本metrics
 - [x] SwiftUI GUIのUDP / Simulator source切替とNetwork metrics
+- [x] OpenVR poseをcanonical modelとUDP publisherへ接続
 - [ ] Windows sender → Mac CLIの有線LAN結合
 - [ ] Windows BridgeからMac CLIへの実機UDP vertical slice
 
@@ -172,7 +173,7 @@ flowchart TD
 - [x] send error、byte数、deadline missの診断
 - [x] configurable 60 / 90 / 120Hzのsimulated sender
 - [x] capture threadとsend thread間のbounded latest-value handoff
-- [ ] 実機backendのcanonical frameをpublisherへ接続
+- [x] 実機backendのcanonical frameをpublisherへ接続
 
 ### C3. Control client
 

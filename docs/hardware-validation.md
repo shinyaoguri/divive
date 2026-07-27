@@ -116,6 +116,16 @@ Preflight:
 - 固定試験でkinematic discontinuityがないことを確認する
 - `pose_valid`とtracking resultを別々に評価する
 
+2026-07-27のTracker 3.0 H0.5結果:
+
+- Windows高分解能waitable timerで3試験とも実効約120Hz、deadline miss 0
+- 固定5分、緩速移動2分、遮蔽60秒でsequence gapとtimestamp reversalなし
+- 固定・緩速移動とも`kinematic_discontinuity_samples == 0`
+- 約11.5秒の完全遮蔽で`pose_valid=false`とdegraded tracking resultを観測し、
+  遮蔽解除後約3.6秒で`running_ok`へ回復
+- [Issue #12](https://github.com/shinyaoguri/divive/issues/12)でH0.5をPASSとし、
+  Tracker 3.0 1台構成に限定してH1 GO
+
 Pass:
 
 - 再起動を含む3回の試行で同じ手順が再現する

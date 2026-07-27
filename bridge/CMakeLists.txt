@@ -23,9 +23,12 @@ if(DIVIVE_BUILD_PROTOCOL)
     add_library(
         divive_bridge_transport
         STATIC
+        src/openvr_bridge_options.cpp
+        src/openvr_pose_adapter.cpp
         src/pose_sender.cpp
         src/sender_options.cpp
         src/udp_publisher.cpp
+        src/uuid.cpp
     )
 
     target_compile_features(divive_bridge_transport PUBLIC cxx_std_20)
@@ -53,6 +56,9 @@ if(DIVIVE_BUILD_OPENVR_PROBE)
         message(FATAL_ERROR "OpenVR probeはWindows x86-64だけを対象とします")
     endif()
     add_subdirectory(probes/openvr)
+    if(DIVIVE_BUILD_PROTOCOL)
+        add_subdirectory(tools/openvr-bridge)
+    endif()
 endif()
 
 if(BUILD_TESTING)

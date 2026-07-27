@@ -1,5 +1,6 @@
 /build/
 /dist/
+/config/local/
 /hub/.build/
 /CMakeUserPresets.json
 .DS_Store

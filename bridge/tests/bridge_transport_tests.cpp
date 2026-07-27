@@ -1,7 +1,10 @@
 #include "divive/bridge/latest_value_mailbox.hpp"
+#include "divive/bridge/openvr_bridge_options.hpp"
+#include "divive/bridge/openvr_pose_adapter.hpp"
 #include "divive/bridge/pose_sender.hpp"
 #include "divive/bridge/sender_options.hpp"
 #include "divive/bridge/udp_publisher.hpp"
+#include "divive/bridge/uuid.hpp"
 
 #include "divive/protocol/envelope.hpp"
 #include "divive/protocol/pose_codec.hpp"
@@ -270,6 +273,175 @@ void test_sender_options() {
                      .options.has_value());
 }
 
+void test_uuid() {
+    constexpr std::string_view name = "uuid";
+    constexpr std::string_view text = "00112233-4455-4677-8899-aabbccddeeff";
+    const auto parsed = divive::bridge::parse_uuid(text);
+    CHECK(name, parsed.has_value());
+    if (parsed) {
+        CHECK(name, divive::bridge::format_uuid(*parsed) == text);
+        CHECK(name, (std::to_integer<std::uint8_t>((*parsed)[6]) >> 4U) == 4U);
+    }
+    CHECK(name, !divive::bridge::parse_uuid("00000000-0000-0000-0000-000000000000")
+                     .has_value());
+    CHECK(name, !divive::bridge::parse_uuid("not-a-uuid").has_value());
+
+    const auto generated = divive::bridge::generate_random_uuid();
+    CHECK(name, !divive::protocol::is_nil_uuid(generated));
+    CHECK(name, (std::to_integer<std::uint8_t>(generated[6]) >> 4U) == 4U);
+    CHECK(name, (std::to_integer<std::uint8_t>(generated[8]) & 0xC0U) == 0x80U);
+    CHECK(
+        name,
+        divive::bridge::parse_uuid(divive::bridge::format_uuid(generated)).has_value());
+}
+
+void test_openvr_bridge_options() {
+    constexpr std::string_view name = "openvr bridge options";
+    CHECK(name, !divive::bridge::parse_openvr_bridge_options({}).options);
+
+    const std::vector<std::string_view> arguments{
+        "--host",
+        "192.0.2.10",
+        "--port",
+        "50000",
+        "--rate",
+        "120",
+        "--duration",
+        "60",
+        "--prediction-seconds",
+        "0.01",
+        "--inventory-interval",
+        "2",
+        "--origin",
+        "raw",
+        "--bridge-id",
+        "00112233-4455-4677-8899-aabbccddeeff",
+        "--tracking-space-id",
+        "10213243-5465-4768-899a-abbccddeeff0",
+        "--space-epoch",
+        "3",
+        "--send-buffer",
+        "524288",
+    };
+    const auto parsed = divive::bridge::parse_openvr_bridge_options(arguments);
+    CHECK(name, parsed.options.has_value());
+    if (parsed.options) {
+        CHECK(name, parsed.options->publisher.destination_host == "192.0.2.10");
+        CHECK(name, parsed.options->publisher.destination_port == 50'000U);
+        CHECK(name, parsed.options->publisher.send_buffer_bytes == 524'288);
+        CHECK(name, parsed.options->rate_hz == 120.0);
+        CHECK(name, parsed.options->duration_seconds == 60.0);
+        CHECK(name, parsed.options->prediction_seconds == 0.01);
+        CHECK(name, parsed.options->inventory_interval_seconds == 2.0);
+        CHECK(name, parsed.options->origin == divive::probe::Origin::raw);
+        CHECK(name, parsed.options->space_epoch == 3U);
+    }
+
+    CHECK(name, !divive::bridge::parse_openvr_bridge_options(
+                     {"--host", "192.0.2.10", "--bridge-id",
+                      "00112233-4455-4677-8899-aabbccddeeff", "--tracking-space-id",
+                      "10213243-5465-4768-899a-abbccddeeff0", "--rate", "75"})
+                     .options);
+}
+
+void test_openvr_pose_adapter() {
+    constexpr std::string_view name = "openvr pose adapter";
+
+    divive::probe::DeviceInventory tracked_inventory;
+    tracked_inventory.device_index = 1;
+    tracked_inventory.device_class = divive::probe::DeviceClass::generic_tracker;
+    tracked_inventory.serial.value = "LHR-TRACKED";
+    tracked_inventory.controller_type.value = "vive_tracker_waist";
+    tracked_inventory.provides_battery.value = true;
+    tracked_inventory.battery.value = 0.75;
+    tracked_inventory.charging.value = true;
+
+    divive::probe::PoseSample tracked;
+    tracked.device_index = 1;
+    tracked.serial = "LHR-TRACKED";
+    tracked.device_class = divive::probe::DeviceClass::generic_tracker;
+    tracked.connected = true;
+    tracked.pose_valid = true;
+    tracked.tracking_result = divive::probe::TrackingResult::running_ok;
+    tracked.position = {.x = 1.0, .y = 2.0, .z = -3.0};
+    tracked.orientation = {.x = 0.0, .y = 0.0, .z = 0.0, .w = 1.0};
+    tracked.linear_velocity = {.x = 0.1, .y = 0.2, .z = 0.3};
+    tracked.angular_velocity = {.x = 0.4, .y = 0.5, .z = 0.6};
+
+    auto lost = tracked;
+    lost.device_index = 2;
+    lost.serial = "LHR-LOST";
+    lost.pose_valid = false;
+    lost.tracking_result = divive::probe::TrackingResult::calibrating_out_of_range;
+
+    auto disconnected = tracked;
+    disconnected.device_index = 3;
+    disconnected.serial.clear();
+    disconnected.connected = false;
+    disconnected.pose_valid = false;
+    disconnected.tracking_result = divive::probe::TrackingResult::uninitialized;
+
+    divive::probe::PoseSample reference;
+    reference.device_index = 4;
+    reference.device_class = divive::probe::DeviceClass::tracking_reference;
+
+    const divive::probe::PoseFrame source{
+        .sequence = 42,
+        .elapsed_ns = 123'456,
+        .devices = {tracked, lost, disconnected, reference},
+    };
+    const std::array inventory{tracked_inventory};
+    const auto converted = divive::bridge::make_openvr_pose_batch(
+        source, inventory,
+        {
+            .tracking_space_id = uuid(std::byte{7}),
+            .space_epoch = 5,
+            .requested_rate_hz = 120,
+        });
+
+    CHECK(name, converted.backend == divive::protocol::Backend::openvr);
+    CHECK(name, converted.tracking_space_id == uuid(std::byte{7}));
+    CHECK(name, converted.space_epoch == 5U);
+    CHECK(name, converted.capture_monotonic_ns == 123'456U);
+    CHECK(name, converted.send_monotonic_ns == 123'456U);
+    CHECK(name, converted.requested_rate_hz == 120U);
+    CHECK(name, converted.trackers.size() == 3U);
+    if (converted.trackers.size() != 3U) {
+        return;
+    }
+
+    const auto& first = converted.trackers[0];
+    CHECK(name, first.tracker_id == "openvr/serial/LHR-TRACKED");
+    CHECK(name, first.id_kind == divive::protocol::TrackerIdKind::permanent);
+    CHECK(name, first.role.empty());
+    CHECK(name, first.runtime_role.empty());
+    CHECK(name, first.position.x == 1.0F);
+    CHECK(name, first.position.z == -3.0F);
+    CHECK(name, first.tracking_state == divive::protocol::TrackingState::tracking);
+    CHECK(name, first.tracking_reason == divive::protocol::TrackingReason::none);
+    CHECK(name, first.connected);
+    CHECK(name, first.battery.has_value());
+    if (first.battery) {
+        CHECK(name, first.battery->level == 0.75F);
+        CHECK(name, first.battery->charging);
+    }
+
+    CHECK(name, converted.trackers[1].tracking_state ==
+                    divive::protocol::TrackingState::lost);
+    CHECK(name, converted.trackers[1].tracking_reason ==
+                    divive::protocol::TrackingReason::out_of_range);
+    CHECK(name, converted.trackers[2].tracker_id == "openvr/session/device-3");
+    CHECK(name,
+          converted.trackers[2].id_kind == divive::protocol::TrackerIdKind::session);
+    CHECK(name, converted.trackers[2].tracking_state ==
+                    divive::protocol::TrackingState::disconnected);
+    CHECK(name, converted.trackers[2].tracking_reason ==
+                    divive::protocol::TrackingReason::device_unplugged);
+
+    const auto encoded = divive::protocol::encode_pose_batch(converted);
+    CHECK(name, static_cast<bool>(encoded));
+}
+
 void test_pose_sender_loopback() {
     constexpr std::string_view name = "pose sender loopback";
     LoopbackReceiver receiver;
@@ -391,6 +563,9 @@ void test_udp_loopback() {
 int main() {
     test_latest_value_mailbox();
     test_sender_options();
+    test_uuid();
+    test_openvr_bridge_options();
+    test_openvr_pose_adapter();
     test_pose_sender_loopback();
     test_udp_loopback();
 
