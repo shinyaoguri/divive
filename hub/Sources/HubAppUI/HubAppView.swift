@@ -292,6 +292,7 @@ private struct SpatialStage: View {
   @ObservedObject var model: HubAppModel
   @Binding var selectedTrackerID: String?
   @State private var viewMode: SimulatorStageViewMode = .spatial
+  @State private var viewportCamera = SimulatorViewportCamera()
   @State private var showsWorkspaceSettings = false
 
   private var effectiveSelectedTrackerID: String? {
@@ -313,24 +314,33 @@ private struct SpatialStage: View {
           onMoveEnded: model.endSimulatorMove
         )
         .accessibilityIdentifier("tracker-space-preview")
+        .opacity(model.trackers.isEmpty ? 0 : 1)
       } else {
         TrackerSpatialPreview(
           trackers: model.trackers,
           workspace: model.simulatorWorkspace,
-          selectedTrackerID: selectedTrackerBinding
+          selectedTrackerID: selectedTrackerBinding,
+          viewportCamera: $viewportCamera
         )
         .accessibilityIdentifier("tracker-spatial-preview")
+        .opacity(model.trackers.isEmpty ? 0 : 1)
       }
 
       VStack {
         HStack(alignment: .top) {
           StageStatusPill(model: model)
           Spacer()
-          StageControls(
-            model: model,
-            viewMode: $viewMode,
-            showsWorkspaceSettings: $showsWorkspaceSettings
-          )
+          VStack(alignment: .trailing, spacing: 10) {
+            StageControls(
+              model: model,
+              viewMode: viewMode,
+              showsWorkspaceSettings: $showsWorkspaceSettings
+            )
+            ViewportOrientationGizmo(
+              viewMode: $viewMode,
+              viewportCamera: $viewportCamera
+            )
+          }
         }
 
         Spacer()
@@ -427,23 +437,13 @@ private struct StageStatusPill: View {
 
 private struct StageControls: View {
   @ObservedObject var model: HubAppModel
-  @Binding var viewMode: SimulatorStageViewMode
+  let viewMode: SimulatorStageViewMode
   @Binding var showsWorkspaceSettings: Bool
 
   var body: some View {
     HStack(spacing: 8) {
-      Picker("表示方向", selection: $viewMode) {
-        ForEach(SimulatorStageViewMode.allCases) { mode in
-          Text(mode.displayName).tag(mode)
-        }
-      }
-      .labelsHidden()
-      .pickerStyle(.segmented)
-      .frame(width: 205)
-
-      Divider()
-        .frame(height: 18)
-
+      Text(viewMode.displayName)
+        .font(.caption.weight(.semibold))
       Text(viewMode.axisDescription)
         .font(.caption.monospaced())
         .foregroundStyle(.secondary)
@@ -478,6 +478,166 @@ private struct StageControls: View {
     .frame(height: 34)
     .background(.regularMaterial, in: Capsule())
     .accessibilityElement(children: .contain)
+  }
+}
+
+private struct ViewportOrientationGizmo: View {
+  @Binding var viewMode: SimulatorStageViewMode
+  @Binding var viewportCamera: SimulatorViewportCamera
+  @Environment(\.accessibilityReduceTransparency)
+  private var reduceTransparency
+
+  var body: some View {
+    VStack(spacing: 5) {
+      ZStack {
+        cubeFace(
+          .top,
+          title: "Y",
+          color: .green,
+          mode: .top
+        )
+        cubeFace(
+          .front,
+          title: "−Z",
+          color: .blue,
+          mode: .front
+        )
+        cubeFace(
+          .side,
+          title: "X",
+          color: .red,
+          mode: .side
+        )
+      }
+      .frame(width: 72, height: 58)
+
+      Button {
+        withAnimation(
+          .spring(response: 0.3, dampingFraction: 0.92)
+        ) {
+          viewMode = .spatial
+          viewportCamera = viewportCamera.restoringPerspective()
+        }
+      } label: {
+        Label("3D", systemImage: "cube.transparent")
+          .font(.caption2.weight(.semibold))
+          .labelStyle(.titleAndIcon)
+          .frame(width: 62, height: 22)
+          .background(
+            viewMode == .spatial
+              ? Color.accentColor
+              : Color.primary.opacity(0.06),
+            in: Capsule()
+          )
+          .foregroundStyle(
+            viewMode == .spatial ? Color.white : Color.primary
+          )
+      }
+      .buttonStyle(.plain)
+      .help("3D透視表示へ戻す")
+    }
+    .padding(8)
+    .background {
+      RoundedRectangle(cornerRadius: 14)
+        .fill(
+          reduceTransparency
+            ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+            : AnyShapeStyle(.regularMaterial)
+        )
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 14)
+        .stroke(.white.opacity(0.15), lineWidth: 0.5)
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("視点方向")
+  }
+
+  private func cubeFace(
+    _ face: ViewportCubeFace,
+    title: String,
+    color: Color,
+    mode: SimulatorStageViewMode
+  ) -> some View {
+    let shape = ViewportCubeFaceShape(face: face)
+    let isSelected = viewMode == mode
+
+    return Button {
+      withAnimation(
+        .spring(response: 0.3, dampingFraction: 0.92)
+      ) {
+        viewMode = mode
+      }
+    } label: {
+      ZStack {
+        shape
+          .fill(
+            color.opacity(isSelected ? 0.82 : 0.2)
+          )
+        shape
+          .stroke(
+            color.opacity(isSelected ? 1 : 0.65),
+            lineWidth: isSelected ? 1.5 : 1
+          )
+        Text(title)
+          .font(.caption2.weight(.bold))
+          .foregroundStyle(isSelected ? Color.white : color)
+          .offset(face.labelOffset)
+      }
+      .frame(width: 72, height: 58)
+      .contentShape(shape)
+    }
+    .buttonStyle(.plain)
+    .help("\(mode.displayName)へ切り替える")
+    .accessibilityLabel("\(mode.displayName)へ切り替える")
+  }
+}
+
+private enum ViewportCubeFace {
+  case top
+  case front
+  case side
+
+  var labelOffset: CGSize {
+    switch self {
+    case .top: CGSize(width: 0, height: -13)
+    case .front: CGSize(width: -14, height: 13)
+    case .side: CGSize(width: 14, height: 13)
+    }
+  }
+}
+
+private struct ViewportCubeFaceShape: Shape {
+  let face: ViewportCubeFace
+
+  func path(in rect: CGRect) -> Path {
+    let centerX = rect.midX
+    let topY = rect.minY + 3
+    let middleY = rect.minY + 24
+    let bottomY = rect.maxY - 3
+    let leftX = rect.minX + 7
+    let rightX = rect.maxX - 7
+
+    var path = Path()
+    switch face {
+    case .top:
+      path.move(to: CGPoint(x: centerX, y: topY))
+      path.addLine(to: CGPoint(x: rightX, y: middleY))
+      path.addLine(to: CGPoint(x: centerX, y: middleY + 12))
+      path.addLine(to: CGPoint(x: leftX, y: middleY))
+    case .front:
+      path.move(to: CGPoint(x: leftX, y: middleY))
+      path.addLine(to: CGPoint(x: centerX, y: middleY + 12))
+      path.addLine(to: CGPoint(x: centerX, y: bottomY))
+      path.addLine(to: CGPoint(x: leftX, y: bottomY - 12))
+    case .side:
+      path.move(to: CGPoint(x: centerX, y: middleY + 12))
+      path.addLine(to: CGPoint(x: rightX, y: middleY))
+      path.addLine(to: CGPoint(x: rightX, y: bottomY - 12))
+      path.addLine(to: CGPoint(x: centerX, y: bottomY))
+    }
+    path.closeSubpath()
+    return path
   }
 }
 

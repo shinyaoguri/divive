@@ -221,6 +221,89 @@ final class SimulatorWorkspaceTests: XCTestCase {
     XCTAssertEqual(ceiling.y, 0.00875, accuracy: 0.000_1)
   }
 
+  func test3DViewportのtoolを明示する() {
+    XCTAssertEqual(
+      SimulatorViewportTool.allCases.map(\.displayName),
+      ["回転", "移動", "ズーム"]
+    )
+  }
+
+  func testOrbitは水平を維持して上下角を制限する() {
+    let camera = SimulatorViewportCamera()
+    let moved = camera.applyingDrag(
+      translation: CGSize(width: 100, height: 1_000),
+      viewportSize: CGSize(width: 800, height: 600),
+      tool: .orbit
+    )
+
+    XCTAssertEqual(
+      moved.yawDegrees,
+      camera.yawDegrees + 32,
+      accuracy: 0.000_1
+    )
+    XCTAssertEqual(moved.pitchDegrees, 85, accuracy: 0.000_1)
+    XCTAssertEqual(moved.zoom, camera.zoom)
+    XCTAssertEqual(moved.panX, camera.panX)
+  }
+
+  func testPanとZoomをviewport範囲内で更新する() {
+    let camera = SimulatorViewportCamera()
+    let panned = camera.applyingDrag(
+      translation: CGSize(width: 80, height: 60),
+      viewportSize: CGSize(width: 800, height: 600),
+      tool: .pan
+    )
+    XCTAssertEqual(panned.panX, 0.09, accuracy: 0.000_1)
+    XCTAssertEqual(panned.panY, -0.09, accuracy: 0.000_1)
+
+    let zoomedOut = camera.applyingDrag(
+      translation: CGSize(width: 0, height: 10_000),
+      viewportSize: CGSize(width: 800, height: 600),
+      tool: .zoom
+    )
+    let zoomedIn = camera.applyingMagnification(100)
+    XCTAssertEqual(
+      zoomedOut.zoom,
+      SimulatorViewportCamera.minimumZoom
+    )
+    XCTAssertEqual(
+      zoomedIn.zoom,
+      SimulatorViewportCamera.maximumZoom
+    )
+  }
+
+  func testFrameSelectedとFrameAllでpivotを切り替える() throws {
+    let workspace = try SimulatorWorkspaceDimensions(
+      widthMeters: 10,
+      heightMeters: 4,
+      depthMeters: 8
+    )
+    let selected = Vector3(x: 0.2, y: -0.1, z: 0.3)
+    let camera = SimulatorViewportCamera(
+      yawDegrees: 44,
+      pitchDegrees: 20,
+      zoom: 0.8,
+      panX: 0.2,
+      panY: -0.1
+    )
+
+    let focused = camera.framingSelected(selected)
+    XCTAssertEqual(focused.pivot, selected)
+    XCTAssertEqual(focused.yawDegrees, 44)
+    XCTAssertEqual(focused.pitchDegrees, 20)
+    XCTAssertEqual(focused.zoom, 1.8)
+    XCTAssertEqual(focused.panX, 0)
+    XCTAssertEqual(focused.panY, 0)
+
+    let framedAll = focused.framingAll(workspace: workspace)
+    let size = SimulatorSceneTransform(workspace: workspace).workspaceSize
+    XCTAssertEqual(
+      framedAll.pivot,
+      Vector3(x: 0, y: -size.y * 0.15, z: 0)
+    )
+    XCTAssertEqual(framedAll.zoom, 1)
+  }
+
   func test単位Quaternionの前方はcanonicalのマイナスZ() {
     let axes = TrackerOrientationAxes(
       orientation: Quaternion(x: 0, y: 0, z: 0, w: 1)

@@ -10,13 +10,15 @@ struct TrackerSpatialPreview: View {
   let trackers: [TrackerDisplayState]
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
+  @Binding var viewportCamera: SimulatorViewportCamera
 
   var body: some View {
     if #available(macOS 15.0, *) {
       TrackerRealityPreview(
         trackers: trackers,
         workspace: workspace,
-        selectedTrackerID: $selectedTrackerID
+        selectedTrackerID: $selectedTrackerID,
+        viewportCamera: $viewportCamera
       )
     } else {
       ContentUnavailableView {
@@ -33,70 +35,154 @@ private struct TrackerRealityPreview: View {
   let trackers: [TrackerDisplayState]
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
+  @Binding var viewportCamera: SimulatorViewportCamera
   @StateObject private var scene = TrackerRealityScene()
+  @State private var navigationTool: SimulatorViewportTool = .orbit
+  @State private var dragOrigin: SimulatorViewportCamera?
+  @State private var dragTool: SimulatorViewportTool?
+  @State private var magnificationOrigin: SimulatorViewportCamera?
+  @State private var modifierKeys: EventModifiers = []
 
   var body: some View {
-    RealityView { content in
-      scene.install(in: &content)
-      scene.synchronize(
-        trackers: trackers,
-        workspace: workspace,
-        selectedTrackerID: selectedTrackerID
-      )
-    } update: { content in
-      scene.install(in: &content)
-      scene.synchronize(
-        trackers: trackers,
-        workspace: workspace,
-        selectedTrackerID: selectedTrackerID
-      )
-    }
-    .realityViewCameraControls(.orbit)
-    .gesture(
-      TapGesture()
-        .targetedToAnyEntity()
-        .onEnded { value in
-          if let trackerID = scene.trackerID(for: value.entity) {
-            selectedTrackerID = trackerID
-          }
-        }
-    )
-    .background {
-      ZStack {
-        Color(nsColor: .controlBackgroundColor)
-        RadialGradient(
-          colors: [
-            Color.accentColor.opacity(0.08),
-            Color.clear,
-          ],
-          center: .topLeading,
-          startRadius: 0,
-          endRadius: 620
+    GeometryReader { geometry in
+      RealityView { content in
+        scene.install(in: &content)
+        scene.synchronize(
+          trackers: trackers,
+          workspace: workspace,
+          selectedTrackerID: selectedTrackerID,
+          viewportCamera: viewportCamera
+        )
+      } update: { content in
+        scene.install(in: &content)
+        scene.synchronize(
+          trackers: trackers,
+          workspace: workspace,
+          selectedTrackerID: selectedTrackerID,
+          viewportCamera: viewportCamera
         )
       }
-    }
-    .overlay(alignment: .bottomLeading) {
-      TrackerOrientationLegend()
+      .simultaneousGesture(
+        TapGesture()
+          .targetedToAnyEntity()
+          .onEnded { value in
+            if let trackerID = scene.trackerID(for: value.entity) {
+              selectedTrackerID = trackerID
+            }
+          }
+      )
+      .simultaneousGesture(
+        dragGesture(viewportSize: geometry.size)
+      )
+      .simultaneousGesture(magnificationGesture)
+      .background {
+        ZStack {
+          Color(nsColor: .controlBackgroundColor)
+          RadialGradient(
+            colors: [
+              Color.accentColor.opacity(0.08),
+              Color.clear,
+            ],
+            center: .topLeading,
+            startRadius: 0,
+            endRadius: 620
+          )
+        }
+      }
+      .overlay(alignment: .bottomLeading) {
+        TrackerOrientationLegend()
+          .padding(18)
+      }
+      .overlay(alignment: .bottom) {
+        ViewportNavigationBar(
+          selectedTool: $navigationTool,
+          effectiveTool: effectiveNavigationTool,
+          canFrameSelected: selectedTracker != nil,
+          onFrameSelected: frameSelected,
+          onFrameAll: frameAll
+        )
         .padding(18)
+      }
+      .accessibilityLabel("Trackerの3D姿勢プレビュー")
+      .accessibilityValue(accessibilityValue)
+      .onModifierKeysChanged(
+        mask: [.option, .command, .control]
+      ) { _, newValue in
+        modifierKeys = newValue
+      }
     }
-    .overlay(alignment: .bottomTrailing) {
-      Label("ドラッグで視点を回転", systemImage: "rotate.3d")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 11)
-        .frame(height: 30)
-        .background(.regularMaterial, in: Capsule())
-        .padding(18)
+  }
+
+  private var selectedTracker: TrackerDisplayState? {
+    trackers.first(where: { $0.id == selectedTrackerID })
+      ?? trackers.first
+  }
+
+  private func dragGesture(viewportSize: CGSize) -> some Gesture {
+    DragGesture(minimumDistance: 3)
+      .onChanged { value in
+        let origin = dragOrigin ?? viewportCamera
+        if dragOrigin == nil {
+          dragOrigin = origin
+          dragTool = effectiveNavigationTool
+        }
+        viewportCamera = origin.applyingDrag(
+          translation: value.translation,
+          viewportSize: viewportSize,
+          tool: dragTool ?? navigationTool
+        )
+      }
+      .onEnded { _ in
+        dragOrigin = nil
+        dragTool = nil
+      }
+  }
+
+  private var effectiveNavigationTool: SimulatorViewportTool {
+    guard modifierKeys.contains(.option) else {
+      return navigationTool
     }
-    .accessibilityLabel("Trackerの3D姿勢プレビュー")
-    .accessibilityValue(accessibilityValue)
+    if modifierKeys.contains(.command) {
+      return .pan
+    }
+    if modifierKeys.contains(.control) {
+      return .zoom
+    }
+    return .orbit
+  }
+
+  private var magnificationGesture: some Gesture {
+    MagnifyGesture()
+      .onChanged { value in
+        let origin = magnificationOrigin ?? viewportCamera
+        if magnificationOrigin == nil {
+          magnificationOrigin = origin
+        }
+        viewportCamera = origin.applyingMagnification(
+          value.magnification
+        )
+      }
+      .onEnded { _ in
+        magnificationOrigin = nil
+      }
+  }
+
+  private func frameSelected() {
+    guard let tracker = selectedTracker else {
+      return
+    }
+    let point = SimulatorSceneTransform(
+      workspace: workspace
+    ).point(for: tracker.position)
+    viewportCamera = viewportCamera.framingSelected(point)
+  }
+
+  private func frameAll() {
+    viewportCamera = viewportCamera.framingAll(workspace: workspace)
   }
 
   private var accessibilityValue: String {
-    guard
-      let tracker = trackers.first(where: { $0.id == selectedTrackerID })
-        ?? trackers.first
-    else {
+    guard let tracker = selectedTracker else {
       return "Trackerはありません"
     }
     let forward = TrackerOrientationAxes(
@@ -109,6 +195,103 @@ private struct TrackerRealityPreview: View {
       forward.y,
       forward.z
     )
+  }
+}
+
+extension SimulatorViewportTool {
+  fileprivate var helpText: String {
+    switch self {
+    case .orbit: "回転：ドラッグ、または⌥ドラッグ"
+    case .pan: "移動：ドラッグ、または⌥⌘ドラッグ"
+    case .zoom: "ズーム：ドラッグ、⌥⌃ドラッグ、またはピンチ"
+    }
+  }
+}
+
+private struct ViewportNavigationBar: View {
+  @Binding var selectedTool: SimulatorViewportTool
+  let effectiveTool: SimulatorViewportTool
+  let canFrameSelected: Bool
+  let onFrameSelected: () -> Void
+  let onFrameAll: () -> Void
+
+  var body: some View {
+    HStack(spacing: 4) {
+      ForEach(SimulatorViewportTool.allCases) { tool in
+        Button {
+          selectedTool = tool
+        } label: {
+          Label(tool.displayName, systemImage: tool.symbolName)
+            .labelStyle(.iconOnly)
+        }
+        .buttonStyle(
+          ViewportToolButtonStyle(isSelected: effectiveTool == tool)
+        )
+        .help(tool.helpText)
+        .accessibilityLabel("\(tool.displayName)ツール")
+        .accessibilityValue(
+          effectiveTool == tool ? "選択中" : "未選択"
+        )
+      }
+
+      Divider()
+        .frame(height: 20)
+        .padding(.horizontal, 3)
+
+      Button(action: onFrameSelected) {
+        Label("選択Trackerへフォーカス", systemImage: "scope")
+          .labelStyle(.iconOnly)
+      }
+      .buttonStyle(ViewportToolButtonStyle(isSelected: false))
+      .disabled(!canFrameSelected)
+      .help("選択Trackerを回転中心にする")
+
+      Button(action: onFrameAll) {
+        Label("作業空間を全表示", systemImage: "square.resize")
+          .labelStyle(.iconOnly)
+      }
+      .buttonStyle(ViewportToolButtonStyle(isSelected: false))
+      .help("視点を戻して作業空間全体を表示")
+
+      Text("\(effectiveTool.displayName)・ドラッグ")
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 6)
+        .frame(minWidth: 96, alignment: .leading)
+    }
+    .padding(4)
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 11))
+    .overlay {
+      RoundedRectangle(cornerRadius: 11)
+        .stroke(.white.opacity(0.14), lineWidth: 0.5)
+    }
+    .accessibilityElement(children: .contain)
+  }
+}
+
+private struct ViewportToolButtonStyle: ButtonStyle {
+  let isSelected: Bool
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 13, weight: .semibold))
+      .foregroundStyle(isSelected ? Color.white : Color.primary)
+      .frame(width: 30, height: 28)
+      .background(
+        isSelected
+          ? Color.accentColor
+          : Color.primary.opacity(configuration.isPressed ? 0.1 : 0),
+        in: RoundedRectangle(cornerRadius: 7)
+      )
+      .scaleEffect(configuration.isPressed ? 0.94 : 1)
+      .animation(
+        .spring(response: 0.22, dampingFraction: 0.9),
+        value: configuration.isPressed
+      )
+      .animation(
+        .spring(response: 0.26, dampingFraction: 0.92),
+        value: isSelected
+      )
   }
 }
 
@@ -142,6 +325,8 @@ private struct TrackerOrientationLegend: View {
 @MainActor
 private final class TrackerRealityScene: ObservableObject {
   private let root = Entity()
+  private let navigationRoot = Entity()
+  private let contentRoot = Entity()
   private let stageRoot = Entity()
   private let trackerRoot = Entity()
   private let cameraTarget = Entity()
@@ -150,16 +335,20 @@ private final class TrackerRealityScene: ObservableObject {
 
   init() {
     root.name = "divive-spatial-preview"
+    navigationRoot.name = "viewport-navigation"
+    contentRoot.name = "viewport-content"
     stageRoot.name = "stage"
     trackerRoot.name = "trackers"
     cameraTarget.name = "camera-target"
     // 仮想cameraは原点から−Zを見るため、sceneを前方へ離して配置する。
     // Tracker Spaceの正規化scaleは保ち、姿勢矢印と作業空間の比率を崩さない。
     root.position.z = -1
-    root.scale = SIMD3(repeating: 0.75)
-    root.addChild(stageRoot)
-    root.addChild(trackerRoot)
+    root.scale = SIMD3(repeating: 1.5)
+    root.addChild(navigationRoot)
     root.addChild(cameraTarget)
+    navigationRoot.addChild(contentRoot)
+    contentRoot.addChild(stageRoot)
+    contentRoot.addChild(trackerRoot)
   }
 
   func install(in content: inout RealityViewCameraContent) {
@@ -173,7 +362,8 @@ private final class TrackerRealityScene: ObservableObject {
   func synchronize(
     trackers: [TrackerDisplayState],
     workspace: SimulatorWorkspaceDimensions,
-    selectedTrackerID: String?
+    selectedTrackerID: String?,
+    viewportCamera: SimulatorViewportCamera
   ) {
     let transform = SimulatorSceneTransform(workspace: workspace)
     if renderedWorkspace != workspace {
@@ -200,6 +390,8 @@ private final class TrackerRealityScene: ObservableObject {
         isSelected: tracker.id == selectedTrackerID
       )
     }
+
+    updateViewport(viewportCamera)
   }
 
   func trackerID(for entity: Entity) -> String? {
@@ -220,14 +412,14 @@ private final class TrackerRealityScene: ObservableObject {
 
     let size = transform.workspaceSize
     let floorY = -size.y / 2
-    // 床と通常の装着高を同時に見やすくするため、作業空間中央より少し下を注視する。
-    cameraTarget.position.y = -size.y * 0.15
-    let lineWidth: Float = 0.004
-    let gridMaterial = UnlitMaterial(
-      color: NSColor.secondaryLabelColor.withAlphaComponent(0.32)
+    let lineWidth: Float = 0.0025
+    let gridMaterial = translucentMaterial(
+      color: .secondaryLabelColor,
+      opacity: 0.22
     )
-    let boundaryMaterial = UnlitMaterial(
-      color: NSColor.secondaryLabelColor.withAlphaComponent(0.62)
+    let boundaryMaterial = translucentMaterial(
+      color: .secondaryLabelColor,
+      opacity: 0.46
     )
 
     let divisions = 10
@@ -257,6 +449,28 @@ private final class TrackerRealityScene: ObservableObject {
     addWorldAxes(
       floorY: floorY,
       size: SIMD3(size.x, size.y, size.z)
+    )
+  }
+
+  private func updateViewport(
+    _ camera: SimulatorViewportCamera
+  ) {
+    let radiansPerDegree = Float.pi / 180
+    let yaw = simd_quatf(
+      angle: camera.yawDegrees * radiansPerDegree,
+      axis: SIMD3(0, 1, 0)
+    )
+    let pitch = simd_quatf(
+      angle: camera.pitchDegrees * radiansPerDegree,
+      axis: SIMD3(1, 0, 0)
+    )
+    navigationRoot.orientation = pitch * yaw
+    navigationRoot.position = SIMD3(camera.panX, camera.panY, 0)
+    navigationRoot.scale = SIMD3(repeating: camera.zoom)
+    contentRoot.position = SIMD3(
+      -camera.pivot.x,
+      -camera.pivot.y,
+      -camera.pivot.z
     )
   }
 
@@ -390,8 +604,9 @@ private final class TrackerRealityScene: ObservableObject {
         cornerRadius: 0.025
       ),
       materials: [
-        UnlitMaterial(
-          color: NSColor.controlAccentColor.withAlphaComponent(0.12)
+        translucentMaterial(
+          color: .controlAccentColor,
+          opacity: 0.14
         )
       ]
     )
@@ -457,6 +672,17 @@ private final class TrackerRealityScene: ObservableObject {
     )
     entity.position = position
     return entity
+  }
+
+  private func translucentMaterial(
+    color: NSColor,
+    opacity: Float
+  ) -> UnlitMaterial {
+    var material = UnlitMaterial(color: color)
+    material.blending = .transparent(
+      opacity: .init(scale: opacity)
+    )
+    return material
   }
 
   private static let trackerNamePrefix = "tracker:"

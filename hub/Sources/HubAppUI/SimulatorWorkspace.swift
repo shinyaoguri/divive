@@ -40,6 +40,129 @@ public enum SimulatorStageViewMode: String, CaseIterable, Identifiable,
   }
 }
 
+/// 3D viewportのdrag操作。選択中のtoolを常に表示し、gestureの意味を曖昧にしない。
+public enum SimulatorViewportTool: String, CaseIterable, Identifiable,
+  Sendable
+{
+  case orbit
+  case pan
+  case zoom
+
+  public var id: Self { self }
+
+  public var displayName: String {
+    switch self {
+    case .orbit: "回転"
+    case .pan: "移動"
+    case .zoom: "ズーム"
+    }
+  }
+
+  public var symbolName: String {
+    switch self {
+    case .orbit: "rotate.3d"
+    case .pan: "hand.draw"
+    case .zoom: "plus.magnifyingglass"
+    }
+  }
+}
+
+/// RealityKitのcameraを直接公開せず、3D sceneをcamera前で操作するviewport状態。
+///
+/// turntable方式でworldの上方向を維持する。drag中は開始時点から計算するため、
+/// GUI更新が挟まってもpointerとsceneがずれない。
+public struct SimulatorViewportCamera: Equatable, Sendable {
+  public static let minimumZoom: Float = 0.35
+  public static let maximumZoom: Float = 4
+
+  public private(set) var yawDegrees: Float
+  public private(set) var pitchDegrees: Float
+  public private(set) var zoom: Float
+  public private(set) var panX: Float
+  public private(set) var panY: Float
+  public private(set) var pivot: Vector3
+
+  public init(
+    yawDegrees: Float = -22,
+    pitchDegrees: Float = -14,
+    zoom: Float = 1,
+    panX: Float = 0,
+    panY: Float = 0,
+    pivot: Vector3 = Vector3(x: 0, y: 0, z: 0)
+  ) {
+    self.yawDegrees = yawDegrees
+    self.pitchDegrees = pitchDegrees
+    self.zoom = Self.clampZoom(zoom)
+    self.panX = panX
+    self.panY = panY
+    self.pivot = pivot
+  }
+
+  public func applyingDrag(
+    translation: CGSize,
+    viewportSize: CGSize,
+    tool: SimulatorViewportTool
+  ) -> Self {
+    var next = self
+    switch tool {
+    case .orbit:
+      next.yawDegrees = yawDegrees + Float(translation.width) * 0.32
+      next.pitchDegrees = min(
+        85,
+        max(-85, pitchDegrees + Float(translation.height) * 0.32)
+      )
+    case .pan:
+      let width = max(Float(viewportSize.width), 1)
+      let height = max(Float(viewportSize.height), 1)
+      next.panX =
+        panX + Float(translation.width) / width
+        * 0.9
+      next.panY =
+        panY - Float(translation.height) / height
+        * 0.9
+    case .zoom:
+      next.zoom = Self.clampZoom(
+        zoom * exp(-Float(translation.height) * 0.008)
+      )
+    }
+    return next
+  }
+
+  public func applyingMagnification(_ magnification: CGFloat) -> Self {
+    var next = self
+    next.zoom = Self.clampZoom(zoom * Float(magnification))
+    return next
+  }
+
+  public func framingAll(
+    workspace: SimulatorWorkspaceDimensions
+  ) -> Self {
+    let size = SimulatorSceneTransform(workspace: workspace).workspaceSize
+    return SimulatorViewportCamera(
+      pivot: Vector3(x: 0, y: -size.y * 0.15, z: 0)
+    )
+  }
+
+  public func framingSelected(_ point: Vector3) -> Self {
+    SimulatorViewportCamera(
+      yawDegrees: yawDegrees,
+      pitchDegrees: pitchDegrees,
+      zoom: max(zoom, 1.8),
+      pivot: point
+    )
+  }
+
+  public func restoringPerspective() -> Self {
+    SimulatorViewportCamera(
+      pivot: pivot
+    )
+  }
+
+  private static func clampZoom(_ value: Float) -> Float {
+    min(maximumZoom, max(minimumZoom, value))
+  }
+}
+
 public enum SimulatorStageProjection: String, CaseIterable, Identifiable,
   Sendable
 {

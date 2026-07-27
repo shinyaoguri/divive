@@ -153,7 +153,8 @@ jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipeli
 
 既定の`3D`表示では、Trackerの位置とQuaternionを立体的に確認できます。上面・正面・
 側面へ切り替え、SimulatorのTrackerをドラッグすると、選択中の投影面に対応する
-2軸を直接変更できます。3D表示内のドラッグは位置編集ではなくcamera orbitです。
+2軸を直接変更できます。3D表示内のドラッグは位置編集ではなく、選択中の視点toolを
+操作します。
 
 | 表示 | 画面右 | 画面上 | 保持する軸 |
 | --- | --- | --- | --- |
@@ -176,10 +177,24 @@ jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipeli
 ### 3D姿勢表示
 
 macOS 15以降ではRealityKitの`RealityView`を使い、作業空間、床grid、Trackerを
-3D表示します。画面ドラッグは作業空間の中心を基準にcameraを周回し、Trackerを
-クリックすると右インスペクタの選択も同期します。作業空間の最大辺をpreview内の
-一定サイズへ正規化するため、0.25〜1,000mの範囲を切り替えても全体の比率を保って
-確認できます。この正規化は表示専用で、Hubのmetre値やcalibrationには影響しません。
+3D表示します。右上の方向cubeは`Y`上面、`-Z`正面、`X`側面へ切り替え、`3D`で
+透視表示へ戻します。下部のnavigation barでは回転、移動、ズームの意味を明示して
+からdragできます。Trackerをクリックすると右インスペクタの選択も同期します。
+
+| 操作 | toolbar | Unity互換shortcut |
+| --- | --- | --- |
+| turntable回転 | 回転を選択してdrag | Option + drag |
+| 画面内移動 | 移動を選択してdrag | Option + Command + drag |
+| zoom | ズームを選択して上下drag | Option + Control + drag、またはpinch |
+
+`選択Trackerへフォーカス`は選択Trackerを次の回転中心へし、
+`作業空間を全表示`はpan、zoom、回転中心、視点角度を既定値へ戻します。回転は
+Blenderのturntable同様にworldの上を保ち、上下角を制限するため、視点が反転して
+方向を見失いません。
+
+作業空間の最大辺をpreview内の一定サイズへ正規化するため、0.25〜1,000mの範囲を
+切り替えても全体の比率を保って確認できます。この正規化は表示専用で、Hubの
+metre値やcalibrationには影響しません。
 
 各Trackerは向きを読み違えにくい非対称形状とし、青い矢印をlocal `-Z`前方として
 表示します。選択Trackerには赤い`+X`、緑の`+Y`も表示し、右インスペクタには
@@ -190,9 +205,11 @@ Quaternionから求めた前方vectorのX/Y/Z成分を表示します。
 あります。macOS 14では3Dを利用できないため、上面・正面・側面で確認します。
 
 実装はAppleの
-[RealityView](https://developer.apple.com/documentation/realitykit/realityview)と
-[CameraControls](https://developer.apple.com/documentation/realitykit/cameracontrols)
-を使用します。
+[RealityView](https://developer.apple.com/documentation/realitykit/realityview)を
+使用します。視点設計は
+[Unity Scene view navigation](https://docs.unity3d.com/Manual/SceneViewNavigation.html)と
+[Blender Navigation](https://docs.blender.org/manual/en/latest/editors/3dview/navigate/navigation.html)
+の共通操作をMac向けに整理しています。
 
 ## UDP受信
 
@@ -273,7 +290,7 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - mDNS discovery、sender allowlist、HMAC、control channel
 - clock mapping、network jitter、one-way latency推定
 - 3D空間でのTracker位置ドラッグと3軸gizmo
-- camera pan / dollyと視点reset
+- mouse wheel zoomとmiddle mouse button pan
 - TrackerごとのID、role、回転編集と数値による位置編集
 - 複数段階のUndo/Redo、キーボードによる位置微調整
 - scene保存・読み込み
