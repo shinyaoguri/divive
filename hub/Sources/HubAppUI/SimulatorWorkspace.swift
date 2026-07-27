@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import HubProtocol
+import simd
 
 public enum SimulatorStageViewMode: String, CaseIterable, Identifiable,
   Sendable
@@ -44,6 +45,7 @@ public enum SimulatorStageViewMode: String, CaseIterable, Identifiable,
 public enum SimulatorViewportTool: String, CaseIterable, Identifiable,
   Sendable
 {
+  case moveTracker
   case orbit
   case pan
   case zoom
@@ -52,14 +54,16 @@ public enum SimulatorViewportTool: String, CaseIterable, Identifiable,
 
   public var displayName: String {
     switch self {
-    case .orbit: "回転"
-    case .pan: "移動"
+    case .moveTracker: "Tracker移動"
+    case .orbit: "視点回転"
+    case .pan: "視点移動"
     case .zoom: "ズーム"
     }
   }
 
   public var symbolName: String {
     switch self {
+    case .moveTracker: "move.3d"
     case .orbit: "rotate.3d"
     case .pan: "hand.draw"
     case .zoom: "plus.magnifyingglass"
@@ -105,6 +109,8 @@ public struct SimulatorViewportCamera: Equatable, Sendable {
   ) -> Self {
     var next = self
     switch tool {
+    case .moveTracker:
+      break
     case .orbit:
       next.yawDegrees = yawDegrees + Float(translation.width) * 0.32
       next.pitchDegrees = min(
@@ -160,6 +166,64 @@ public struct SimulatorViewportCamera: Equatable, Sendable {
 
   private static func clampZoom(_ value: Float) -> Float {
     min(maximumZoom, max(minimumZoom, value))
+  }
+}
+
+/// 画面上のdrag量を、現在の3D視点に平行なcanonical XYZ差分へ変換する。
+///
+/// 視点の回転とzoomを逆適用するため、斜め視点でもTrackerがpointerへ1:1で追従する。
+/// 奥行きを含む1軸の精密編集は、方向cubeから切り替える直交viewが担う。
+public struct SimulatorSpatialDragTransform: Equatable, Sendable {
+  public static let viewportSpan: Float = 0.9
+
+  public let workspace: SimulatorWorkspaceDimensions
+  public let camera: SimulatorViewportCamera
+  public let viewportSize: CGSize
+
+  public init(
+    workspace: SimulatorWorkspaceDimensions,
+    camera: SimulatorViewportCamera,
+    viewportSize: CGSize
+  ) {
+    self.workspace = workspace
+    self.camera = camera
+    self.viewportSize = viewportSize
+  }
+
+  public func position(
+    from originalPosition: Vector3,
+    translation: CGSize,
+    clampsToWorkspace: Bool
+  ) -> Vector3 {
+    let width = max(Float(viewportSize.width), 1)
+    let height = max(Float(viewportSize.height), 1)
+    let viewDelta = SIMD3<Float>(
+      Float(translation.width) / width * Self.viewportSpan / camera.zoom,
+      -Float(translation.height) / height * Self.viewportSpan / camera.zoom,
+      0
+    )
+
+    let radiansPerDegree = Float.pi / 180
+    let yaw = simd_quatf(
+      angle: camera.yawDegrees * radiansPerDegree,
+      axis: SIMD3(0, 1, 0)
+    )
+    let pitch = simd_quatf(
+      angle: camera.pitchDegrees * radiansPerDegree,
+      axis: SIMD3(1, 0, 0)
+    )
+    let sceneDelta = (pitch * yaw).inverse.act(viewDelta)
+    let sceneTransform = SimulatorSceneTransform(workspace: workspace)
+    let origin = sceneTransform.point(for: originalPosition)
+    let resolved = sceneTransform.position(
+      for: Vector3(
+        x: origin.x + sceneDelta.x,
+        y: origin.y + sceneDelta.y,
+        z: origin.z + sceneDelta.z
+      )
+    )
+
+    return clampsToWorkspace ? workspace.clamped(resolved) : resolved
   }
 }
 
@@ -471,6 +535,14 @@ public struct SimulatorSceneTransform: Equatable, Sendable {
       x: position.x * scale,
       y: (position.y - Float(workspace.heightMeters / 2)) * scale,
       z: position.z * scale
+    )
+  }
+
+  public func position(for point: Vector3) -> Vector3 {
+    Vector3(
+      x: point.x / scale,
+      y: point.y / scale + Float(workspace.heightMeters / 2),
+      z: point.z / scale
     )
   }
 }

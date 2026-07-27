@@ -320,7 +320,12 @@ private struct SpatialStage: View {
           trackers: model.trackers,
           workspace: model.simulatorWorkspace,
           selectedTrackerID: selectedTrackerBinding,
-          viewportCamera: $viewportCamera
+          viewportCamera: $viewportCamera,
+          isEditable: model.canDirectlyEditSimulator,
+          clampsToWorkspace: model.clampsSimulatorToWorkspace,
+          onMoveBegan: model.beginSimulatorMove,
+          onMoveChanged: model.moveSimulatorTracker,
+          onMoveEnded: model.endSimulatorMove
         )
         .accessibilityIdentifier("tracker-spatial-preview")
         .opacity(model.trackers.isEmpty ? 0 : 1)

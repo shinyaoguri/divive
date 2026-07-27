@@ -3,14 +3,17 @@ import HubProtocol
 import RealityKit
 import SwiftUI
 
-/// Quaternionと位置を同時に確認する3D preview。
-///
-/// 位置の精密編集は直交stageへ残し、このviewではcamera orbitと向きの把握を優先する。
+/// Quaternionと位置を同時に確認し、Trackerを直接移動できる3D preview。
 struct TrackerSpatialPreview: View {
   let trackers: [TrackerDisplayState]
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
   @Binding var viewportCamera: SimulatorViewportCamera
+  let isEditable: Bool
+  let clampsToWorkspace: Bool
+  let onMoveBegan: (String, Vector3) -> Void
+  let onMoveChanged: (String, Vector3) -> Void
+  let onMoveEnded: (String) -> Void
 
   var body: some View {
     if #available(macOS 15.0, *) {
@@ -18,7 +21,12 @@ struct TrackerSpatialPreview: View {
         trackers: trackers,
         workspace: workspace,
         selectedTrackerID: $selectedTrackerID,
-        viewportCamera: $viewportCamera
+        viewportCamera: $viewportCamera,
+        isEditable: isEditable,
+        clampsToWorkspace: clampsToWorkspace,
+        onMoveBegan: onMoveBegan,
+        onMoveChanged: onMoveChanged,
+        onMoveEnded: onMoveEnded
       )
     } else {
       ContentUnavailableView {
@@ -36,10 +44,16 @@ private struct TrackerRealityPreview: View {
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
   @Binding var viewportCamera: SimulatorViewportCamera
+  let isEditable: Bool
+  let clampsToWorkspace: Bool
+  let onMoveBegan: (String, Vector3) -> Void
+  let onMoveChanged: (String, Vector3) -> Void
+  let onMoveEnded: (String) -> Void
   @StateObject private var scene = TrackerRealityScene()
-  @State private var navigationTool: SimulatorViewportTool = .orbit
+  @State private var navigationTool: SimulatorViewportTool = .moveTracker
   @State private var dragOrigin: SimulatorViewportCamera?
   @State private var dragTool: SimulatorViewportTool?
+  @State private var trackerDragState: SpatialTrackerDragState?
   @State private var magnificationOrigin: SimulatorViewportCamera?
   @State private var modifierKeys: EventModifiers = []
 
@@ -72,6 +86,9 @@ private struct TrackerRealityPreview: View {
           }
       )
       .simultaneousGesture(
+        trackerDragGesture(viewportSize: geometry.size)
+      )
+      .simultaneousGesture(
         dragGesture(viewportSize: geometry.size)
       )
       .simultaneousGesture(magnificationGesture)
@@ -97,6 +114,7 @@ private struct TrackerRealityPreview: View {
         ViewportNavigationBar(
           selectedTool: $navigationTool,
           effectiveTool: effectiveNavigationTool,
+          canMoveTracker: isEditable,
           canFrameSelected: selectedTracker != nil,
           onFrameSelected: frameSelected,
           onFrameAll: frameAll
@@ -116,6 +134,56 @@ private struct TrackerRealityPreview: View {
   private var selectedTracker: TrackerDisplayState? {
     trackers.first(where: { $0.id == selectedTrackerID })
       ?? trackers.first
+  }
+
+  private func trackerDragGesture(
+    viewportSize: CGSize
+  ) -> some Gesture {
+    DragGesture(minimumDistance: 0, coordinateSpace: .local)
+      .targetedToAnyEntity()
+      .onChanged { value in
+        if trackerDragState == nil {
+          guard
+            isEditable,
+            effectiveNavigationTool == .moveTracker,
+            let trackerID = scene.trackerID(for: value.entity),
+            let tracker = trackers.first(where: { $0.id == trackerID })
+          else {
+            return
+          }
+
+          selectedTrackerID = trackerID
+          trackerDragState = SpatialTrackerDragState(
+            trackerID: trackerID,
+            originalPosition: tracker.position,
+            camera: viewportCamera
+          )
+          onMoveBegan(trackerID, tracker.position)
+        }
+
+        guard let trackerDragState else { return }
+        let didMove =
+          abs(value.translation.width) > 0.1
+          || abs(value.translation.height) > 0.1
+        guard didMove else { return }
+
+        let transform = SimulatorSpatialDragTransform(
+          workspace: workspace,
+          camera: trackerDragState.camera,
+          viewportSize: viewportSize
+        )
+        let position = transform.position(
+          from: trackerDragState.originalPosition,
+          translation: value.translation,
+          clampsToWorkspace: clampsToWorkspace
+        )
+        onMoveChanged(trackerDragState.trackerID, position)
+      }
+      .onEnded { _ in
+        guard let trackerDragState else { return }
+        onMoveEnded(trackerDragState.trackerID)
+        self.trackerDragState = nil
+      }
   }
 
   private func dragGesture(viewportSize: CGSize) -> some Gesture {
@@ -201,8 +269,9 @@ private struct TrackerRealityPreview: View {
 extension SimulatorViewportTool {
   fileprivate var helpText: String {
     switch self {
-    case .orbit: "回転：ドラッグ、または⌥ドラッグ"
-    case .pan: "移動：ドラッグ、または⌥⌘ドラッグ"
+    case .moveTracker: "Trackerを掴んで画面に沿って移動"
+    case .orbit: "視点回転：ドラッグ、または⌥ドラッグ"
+    case .pan: "視点移動：ドラッグ、または⌥⌘ドラッグ"
     case .zoom: "ズーム：ドラッグ、⌥⌃ドラッグ、またはピンチ"
     }
   }
@@ -211,6 +280,7 @@ extension SimulatorViewportTool {
 private struct ViewportNavigationBar: View {
   @Binding var selectedTool: SimulatorViewportTool
   let effectiveTool: SimulatorViewportTool
+  let canMoveTracker: Bool
   let canFrameSelected: Bool
   let onFrameSelected: () -> Void
   let onFrameAll: () -> Void
@@ -227,7 +297,12 @@ private struct ViewportNavigationBar: View {
         .buttonStyle(
           ViewportToolButtonStyle(isSelected: effectiveTool == tool)
         )
-        .help(tool.helpText)
+        .disabled(tool == .moveTracker && !canMoveTracker)
+        .help(
+          tool == .moveTracker && !canMoveTracker
+            ? "Tracker移動はSimulator実行中のみ利用できます"
+            : tool.helpText
+        )
         .accessibilityLabel("\(tool.displayName)ツール")
         .accessibilityValue(
           effectiveTool == tool ? "選択中" : "未選択"
@@ -253,11 +328,11 @@ private struct ViewportNavigationBar: View {
       .buttonStyle(ViewportToolButtonStyle(isSelected: false))
       .help("視点を戻して作業空間全体を表示")
 
-      Text("\(effectiveTool.displayName)・ドラッグ")
+      Text(effectiveTool.statusText)
         .font(.caption.weight(.medium))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 6)
-        .frame(minWidth: 96, alignment: .leading)
+        .frame(minWidth: 126, alignment: .leading)
     }
     .padding(4)
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 11))
@@ -266,6 +341,15 @@ private struct ViewportNavigationBar: View {
         .stroke(.white.opacity(0.14), lineWidth: 0.5)
     }
     .accessibilityElement(children: .contain)
+  }
+}
+
+extension SimulatorViewportTool {
+  fileprivate var statusText: String {
+    switch self {
+    case .moveTracker: "Trackerをドラッグ"
+    case .orbit, .pan, .zoom: "\(displayName)・空間をドラッグ"
+    }
   }
 }
 
@@ -293,6 +377,12 @@ private struct ViewportToolButtonStyle: ButtonStyle {
         value: isSelected
       )
   }
+}
+
+private struct SpatialTrackerDragState {
+  let trackerID: String
+  let originalPosition: Vector3
+  let camera: SimulatorViewportCamera
 }
 
 private struct TrackerOrientationLegend: View {

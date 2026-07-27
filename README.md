@@ -124,9 +124,9 @@ Hub入力へ供給します。
 
 [Mac Hub GUI](hub/GUI.md)はUDP Network sourceとHeadless Simulatorを切り替え、
 Quaternionの向きとlocal -Z前方をRealityKit 3D表示で確認できます。方向cubeと
-turntable orbit、pan、zoom、Frame Selected / Allを備え、上面・正面・側面では
-位置を編集できます。Simulator実行中は、任意の有限作業空間を自動fitしながら
-TrackerのXYZ位置をマウス操作できます。現段階では開発用実行形式です。
+turntable orbit、pan、zoom、Frame Selected / Allを備え、3Dでは画面に沿った直接移動、
+上面・正面・側面では2軸の精密編集ができます。Simulator実行中は、任意の有限作業空間を
+自動fitしながらTrackerのXYZ位置をマウス操作できます。現段階では開発用実行形式です。
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
