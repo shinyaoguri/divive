@@ -184,6 +184,7 @@ Tracker IDを指定するとrenameになります。`moveTracker(id:toDisplayedP
 - WebSocket、Unityなど外部contentへの配信
 
 SwiftUIの開発用GUIは[GUI.md](GUI.md)でHeadless APIへ接続し、UDP Network sourceと
-切り替えられます。現在は上面・正面・側面の直交表示から個別TrackerのXYZ位置を
-マウス編集できます。perspective 3D表示と3軸gizmoは後続範囲です。次段階では
-Recorder / Playbackまたはcontent向け配信を同じHub入力境界へ接続します。
+切り替えられます。macOS 15以降ではRealityKit 3D表示でQuaternionのlocal -Z前方を
+確認でき、上面・正面・側面の直交表示から個別TrackerのXYZ位置をマウス編集できます。
+3D空間での位置編集と3軸gizmoは後続範囲です。次段階ではRecorder / Playbackまたは
+content向け配信を同じHub入力境界へ接続します。

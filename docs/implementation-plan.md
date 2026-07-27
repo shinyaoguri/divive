@@ -235,7 +235,8 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 - [x] X / -Z上面図
 - [x] 上面・正面・側面の直交投影によるSimulator XYZマウス操作
 - [x] 0.25〜1,000mの有限作業空間、自動fit、境界clamp、単一Undo
-- [ ] RealityKitによる3D pose表示
+- [x] RealityKitによる3D pose、Quaternion方向軸、camera orbit表示
+- [ ] 3D空間での位置編集、3軸gizmo、camera pan / dolly
 - [x] tracking、lost、disconnected、simulated
 - [x] Simulator rate、frame loss、delay、jitter、reordering、disconnect、
   age、deadline miss
@@ -306,7 +307,8 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] GUIからmotionを維持したままbase poseを移動
 - [x] 上面・正面・側面のマウス操作でXYZ全方向を編集
 - [x] 幅・高さ・奥行きが独立した有限作業空間と自動fit
-- [ ] perspective 3D表示、camera orbit、3軸gizmo
+- [x] perspective 3D表示、Quaternionのlocal -Z前方、camera orbit
+- [ ] 3D位置編集、3軸gizmo、camera pan / dolly
 - [ ] scene保存、複数Undo/Redo、キーボード微調整
 
 ### F2. Calibration

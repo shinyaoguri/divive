@@ -50,8 +50,8 @@ macOSの運用コンソールとして、空間の動きと異常の発見を主
 - メニューバー: ウィンドウを閉じても継続する状態監視と最小限の復旧操作
 - ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、開始または停止、
   右端の現在Source設定
-- ライブ空間: 上面・正面・側面の直交プレビューと、Source状態、更新レート、
-  Tracker数、Simulator直接操作
+- ライブ空間: Quaternionの向きが分かる3Dプレビュー、上面・正面・側面の
+  直交プレビュー、Source状態、更新レート、Tracker数、Simulator直接操作
 - 右インスペクタ上部: 最大16台のTracker一覧
 - 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
 - 右インスペクタ中央: 選択したTrackerの直近6秒の位置推移
@@ -151,8 +151,9 @@ jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipeli
 
 ### Trackerのマウス操作
 
-Simulatorを開始し、ライブ空間のTrackerをドラッグすると、選択中の投影面に対応する
-2軸を直接変更できます。
+既定の`3D`表示では、Trackerの位置とQuaternionを立体的に確認できます。上面・正面・
+側面へ切り替え、SimulatorのTrackerをドラッグすると、選択中の投影面に対応する
+2軸を直接変更できます。3D表示内のドラッグは位置編集ではなくcamera orbitです。
 
 | 表示 | 画面右 | 画面上 | 保持する軸 |
 | --- | --- | --- | --- |
@@ -171,6 +172,27 @@ Simulatorを開始し、ライブ空間のTrackerをドラッグすると、選�
 「Trackerを作業空間内に制限」が有効なら、ドラッグ位置を各境界でclampします。
 無効にすると範囲外へも移動できますが、範囲外のTrackerはプレビューに見えなくなる
 場合があります。
+
+### 3D姿勢表示
+
+macOS 15以降ではRealityKitの`RealityView`を使い、作業空間、床grid、Trackerを
+3D表示します。画面ドラッグは作業空間の中心を基準にcameraを周回し、Trackerを
+クリックすると右インスペクタの選択も同期します。作業空間の最大辺をpreview内の
+一定サイズへ正規化するため、0.25〜1,000mの範囲を切り替えても全体の比率を保って
+確認できます。この正規化は表示専用で、Hubのmetre値やcalibrationには影響しません。
+
+各Trackerは向きを読み違えにくい非対称形状とし、青い矢印をlocal `-Z`前方として
+表示します。選択Trackerには赤い`+X`、緑の`+Y`も表示し、右インスペクタには
+Quaternionから求めた前方vectorのX/Y/Z成分を表示します。
+
+ここでいう前方は共通pose規約のlocal `-Z`です。物理VIVE Trackerのロゴ面や装着対象の
+「前」と一致するとは限らず、装着offsetやcalibration profileは別に適用する必要が
+あります。macOS 14では3Dを利用できないため、上面・正面・側面で確認します。
+
+実装はAppleの
+[RealityView](https://developer.apple.com/documentation/realitykit/realityview)と
+[CameraControls](https://developer.apple.com/documentation/realitykit/cameracontrols)
+を使用します。
 
 ## UDP受信
 
@@ -203,6 +225,7 @@ sender allowlistがないため、信頼できるprivate LANでのみ使って�
 
 - Hub latest stateの実測更新レート
 - Hubへ入力したTracker数と全体の追跡状態
+- Quaternion、local -Z前方、作業空間を確認するRealityKit 3D表示
 - X/-Z上面、X/Y正面、-Z/Y側面の直交プレビュー
 - 作業空間に応じた可変gridと全体の自動fit
 - 全Trackerのrole、実効tracking state、receive age
@@ -249,7 +272,8 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - Windows実機Bridgeとの有線LAN結合検証
 - mDNS discovery、sender allowlist、HMAC、control channel
 - clock mapping、network jitter、one-way latency推定
-- RealityKitによるperspective 3D表示、camera orbit、3軸gizmo
+- 3D空間でのTracker位置ドラッグと3軸gizmo
+- camera pan / dollyと視点reset
 - TrackerごとのID、role、回転編集と数値による位置編集
 - 複数段階のUndo/Redo、キーボードによる位置微調整
 - scene保存・読み込み

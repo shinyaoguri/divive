@@ -2,6 +2,44 @@ import CoreGraphics
 import Foundation
 import HubProtocol
 
+public enum SimulatorStageViewMode: String, CaseIterable, Identifiable,
+  Sendable
+{
+  case spatial
+  case top
+  case front
+  case side
+
+  public var id: Self { self }
+
+  public var displayName: String {
+    switch self {
+    case .spatial: "3D"
+    case .top: "上面"
+    case .front: "正面"
+    case .side: "側面"
+    }
+  }
+
+  public var projection: SimulatorStageProjection? {
+    switch self {
+    case .spatial: nil
+    case .top: .top
+    case .front: .front
+    case .side: .side
+    }
+  }
+
+  public var axisDescription: String {
+    switch self {
+    case .spatial: "−Z = 前方"
+    case .top: "X →   −Z ↑"
+    case .front: "X →   Y ↑"
+    case .side: "−Z →   Y ↑"
+    }
+  }
+}
+
 public enum SimulatorStageProjection: String, CaseIterable, Identifiable,
   Sendable
 {
@@ -265,5 +303,104 @@ public struct SimulatorStageTransform: Equatable, Sendable {
       factor = 10
     }
     return factor * magnitude
+  }
+}
+
+/// canonical空間を、cameraから読みやすい一定サイズの3D preview空間へ写す。
+///
+/// metre値の比率は保ち、X/Zは原点中心、Yは床面からの高さを中央揃えする。
+/// これは表示だけの変換で、Hubのposeやcalibration値は変更しない。
+public struct SimulatorSceneTransform: Equatable, Sendable {
+  public static let defaultPreviewSpan: Float = 0.7
+
+  public let workspace: SimulatorWorkspaceDimensions
+  public let previewSpan: Float
+
+  public init(
+    workspace: SimulatorWorkspaceDimensions,
+    previewSpan: Float = Self.defaultPreviewSpan
+  ) {
+    self.workspace = workspace
+    self.previewSpan = max(0.1, previewSpan)
+  }
+
+  public var scale: Float {
+    let maximumDimension = Float(
+      max(
+        workspace.widthMeters,
+        workspace.heightMeters,
+        workspace.depthMeters
+      )
+    )
+    return previewSpan / maximumDimension
+  }
+
+  public var workspaceSize: Vector3 {
+    Vector3(
+      x: Float(workspace.widthMeters) * scale,
+      y: Float(workspace.heightMeters) * scale,
+      z: Float(workspace.depthMeters) * scale
+    )
+  }
+
+  public func point(for position: Vector3) -> Vector3 {
+    Vector3(
+      x: position.x * scale,
+      y: (position.y - Float(workspace.heightMeters / 2)) * scale,
+      z: position.z * scale
+    )
+  }
+}
+
+/// Trackerのlocal axisをorientation Quaternionでcanonical空間へ回転した方向。
+///
+/// forwardは共通座標規約のlocal -Zを指す。物理Trackerの装着offsetは含まない。
+public struct TrackerOrientationAxes: Equatable, Sendable {
+  public let right: Vector3
+  public let up: Vector3
+  public let forward: Vector3
+
+  public init(orientation: Quaternion) {
+    right = Self.rotate(
+      Vector3(x: 1, y: 0, z: 0),
+      by: orientation
+    )
+    up = Self.rotate(
+      Vector3(x: 0, y: 1, z: 0),
+      by: orientation
+    )
+    forward = Self.rotate(
+      Vector3(x: 0, y: 0, z: -1),
+      by: orientation
+    )
+  }
+
+  private static func rotate(
+    _ vector: Vector3,
+    by quaternion: Quaternion
+  ) -> Vector3 {
+    let q = Vector3(
+      x: quaternion.x,
+      y: quaternion.y,
+      z: quaternion.z
+    )
+    let firstCross = cross(q, vector)
+    let secondCross = cross(q, firstCross)
+    return Vector3(
+      x: vector.x + 2 * quaternion.w * firstCross.x
+        + 2 * secondCross.x,
+      y: vector.y + 2 * quaternion.w * firstCross.y
+        + 2 * secondCross.y,
+      z: vector.z + 2 * quaternion.w * firstCross.z
+        + 2 * secondCross.z
+    )
+  }
+
+  private static func cross(_ lhs: Vector3, _ rhs: Vector3) -> Vector3 {
+    Vector3(
+      x: lhs.y * rhs.z - lhs.z * rhs.y,
+      y: lhs.z * rhs.x - lhs.x * rhs.z,
+      z: lhs.x * rhs.y - lhs.y * rhs.x
+    )
   }
 }

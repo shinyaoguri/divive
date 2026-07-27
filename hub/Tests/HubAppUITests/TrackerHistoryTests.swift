@@ -212,6 +212,7 @@ final class TrackerHistoryTests: XCTestCase {
         y: 1,
         z: -1
       ),
+      orientation: Quaternion(x: 0, y: 0, z: 0, w: 1),
       trackingState: state,
       trackingReason: .none,
       liveness: .fresh,

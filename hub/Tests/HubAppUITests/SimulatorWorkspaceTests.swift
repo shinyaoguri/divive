@@ -5,6 +5,17 @@ import XCTest
 @testable import HubAppUI
 
 final class SimulatorWorkspaceTests: XCTestCase {
+  func test3Dを既定候補にして直交投影を位置編集用に残す() {
+    XCTAssertEqual(
+      SimulatorStageViewMode.allCases.map(\.displayName),
+      ["3D", "上面", "正面", "側面"]
+    )
+    XCTAssertNil(SimulatorStageViewMode.spatial.projection)
+    XCTAssertEqual(SimulatorStageViewMode.top.projection, .top)
+    XCTAssertEqual(SimulatorStageViewMode.front.projection, .front)
+    XCTAssertEqual(SimulatorStageViewMode.side.projection, .side)
+  }
+
   func test作業空間の範囲と有限値を検証する() throws {
     let workspace = try SimulatorWorkspaceDimensions(
       widthMeters: 20,
@@ -185,5 +196,56 @@ final class SimulatorWorkspaceTests: XCTestCase {
         let magnitude = pow(10, floor(log10(transform.gridStepMeters)))
         return abs(transform.gridStepMeters / magnitude - $0) < 0.000_1
       })
+  }
+
+  func test3D表示は最大辺を一定にして床と天井を中央へ写す() throws {
+    let workspace = try SimulatorWorkspaceDimensions(
+      widthMeters: 100,
+      heightMeters: 2.5,
+      depthMeters: 7
+    )
+    let transform = SimulatorSceneTransform(workspace: workspace)
+
+    XCTAssertEqual(transform.scale, 0.007, accuracy: 0.000_1)
+    XCTAssertEqual(transform.workspaceSize.x, 0.7, accuracy: 0.000_1)
+    XCTAssertEqual(transform.workspaceSize.y, 0.0175, accuracy: 0.000_1)
+    XCTAssertEqual(transform.workspaceSize.z, 0.049, accuracy: 0.000_1)
+
+    let floor = transform.point(
+      for: Vector3(x: 0, y: 0, z: 0)
+    )
+    let ceiling = transform.point(
+      for: Vector3(x: 0, y: 2.5, z: 0)
+    )
+    XCTAssertEqual(floor.y, -0.00875, accuracy: 0.000_1)
+    XCTAssertEqual(ceiling.y, 0.00875, accuracy: 0.000_1)
+  }
+
+  func test単位Quaternionの前方はcanonicalのマイナスZ() {
+    let axes = TrackerOrientationAxes(
+      orientation: Quaternion(x: 0, y: 0, z: 0, w: 1)
+    )
+
+    XCTAssertEqual(axes.right, Vector3(x: 1, y: 0, z: 0))
+    XCTAssertEqual(axes.up, Vector3(x: 0, y: 1, z: 0))
+    XCTAssertEqual(axes.forward, Vector3(x: 0, y: 0, z: -1))
+  }
+
+  func testY軸90度回転で前方と右方向を回転する() {
+    let halfSqrt = Float(0.5.squareRoot())
+    let axes = TrackerOrientationAxes(
+      orientation: Quaternion(
+        x: 0,
+        y: halfSqrt,
+        z: 0,
+        w: halfSqrt
+      )
+    )
+
+    XCTAssertEqual(axes.forward.x, -1, accuracy: 0.000_1)
+    XCTAssertEqual(axes.forward.y, 0, accuracy: 0.000_1)
+    XCTAssertEqual(axes.forward.z, 0, accuracy: 0.000_1)
+    XCTAssertEqual(axes.right.x, 0, accuracy: 0.000_1)
+    XCTAssertEqual(axes.right.z, -1, accuracy: 0.000_1)
   }
 }

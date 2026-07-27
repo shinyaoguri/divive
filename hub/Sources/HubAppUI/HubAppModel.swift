@@ -23,6 +23,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
   public let id: String
   public let role: String
   public let position: Vector3
+  public let orientation: Quaternion
   public let trackingState: TrackingState
   public let trackingReason: TrackingReason
   public let liveness: HubLivenessState
@@ -33,6 +34,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     id = state.latest.pose.trackerID
     role = state.latest.pose.role
     position = state.latest.pose.position
+    orientation = state.latest.pose.orientation
     trackingState = state.trackingState
     trackingReason = state.trackingReason
     liveness = state.liveness
@@ -44,6 +46,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     id: String,
     role: String,
     position: Vector3,
+    orientation: Quaternion,
     trackingState: TrackingState,
     trackingReason: TrackingReason,
     liveness: HubLivenessState,
@@ -53,6 +56,7 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     self.id = id
     self.role = role
     self.position = position
+    self.orientation = orientation
     self.trackingState = trackingState
     self.trackingReason = trackingReason
     self.liveness = liveness
@@ -380,6 +384,7 @@ public final class HubAppModel: ObservableObject {
       id: current.id,
       role: current.role,
       position: position,
+      orientation: current.orientation,
       trackingState: current.trackingState,
       trackingReason: current.trackingReason,
       liveness: current.liveness,

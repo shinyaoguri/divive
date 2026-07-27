@@ -291,7 +291,7 @@ private struct HubWorkspace: View {
 private struct SpatialStage: View {
   @ObservedObject var model: HubAppModel
   @Binding var selectedTrackerID: String?
-  @State private var projection: SimulatorStageProjection = .top
+  @State private var viewMode: SimulatorStageViewMode = .spatial
   @State private var showsWorkspaceSettings = false
 
   private var effectiveSelectedTrackerID: String? {
@@ -300,21 +300,27 @@ private struct SpatialStage: View {
 
   var body: some View {
     ZStack {
-      TrackerProjectionView(
-        trackers: model.trackers,
-        projection: projection,
-        workspace: model.simulatorWorkspace,
-        selectedTrackerID: Binding(
-          get: { effectiveSelectedTrackerID },
-          set: { selectedTrackerID = $0 }
-        ),
-        isEditable: model.canDirectlyEditSimulator,
-        clampsToWorkspace: model.clampsSimulatorToWorkspace,
-        onMoveBegan: model.beginSimulatorMove,
-        onMoveChanged: model.moveSimulatorTracker,
-        onMoveEnded: model.endSimulatorMove
-      )
-      .accessibilityIdentifier("tracker-space-preview")
+      if let projection = viewMode.projection {
+        TrackerProjectionView(
+          trackers: model.trackers,
+          projection: projection,
+          workspace: model.simulatorWorkspace,
+          selectedTrackerID: selectedTrackerBinding,
+          isEditable: model.canDirectlyEditSimulator,
+          clampsToWorkspace: model.clampsSimulatorToWorkspace,
+          onMoveBegan: model.beginSimulatorMove,
+          onMoveChanged: model.moveSimulatorTracker,
+          onMoveEnded: model.endSimulatorMove
+        )
+        .accessibilityIdentifier("tracker-space-preview")
+      } else {
+        TrackerSpatialPreview(
+          trackers: model.trackers,
+          workspace: model.simulatorWorkspace,
+          selectedTrackerID: selectedTrackerBinding
+        )
+        .accessibilityIdentifier("tracker-spatial-preview")
+      }
 
       VStack {
         HStack(alignment: .top) {
@@ -322,7 +328,7 @@ private struct SpatialStage: View {
           Spacer()
           StageControls(
             model: model,
-            projection: $projection,
+            viewMode: $viewMode,
             showsWorkspaceSettings: $showsWorkspaceSettings
           )
         }
@@ -336,6 +342,13 @@ private struct SpatialStage: View {
         EmptyStage(model: model)
       }
     }
+  }
+
+  private var selectedTrackerBinding: Binding<String?> {
+    Binding(
+      get: { effectiveSelectedTrackerID },
+      set: { selectedTrackerID = $0 }
+    )
   }
 }
 
@@ -414,24 +427,24 @@ private struct StageStatusPill: View {
 
 private struct StageControls: View {
   @ObservedObject var model: HubAppModel
-  @Binding var projection: SimulatorStageProjection
+  @Binding var viewMode: SimulatorStageViewMode
   @Binding var showsWorkspaceSettings: Bool
 
   var body: some View {
     HStack(spacing: 8) {
-      Picker("表示方向", selection: $projection) {
-        ForEach(SimulatorStageProjection.allCases) { projection in
-          Text(projection.displayName).tag(projection)
+      Picker("表示方向", selection: $viewMode) {
+        ForEach(SimulatorStageViewMode.allCases) { mode in
+          Text(mode.displayName).tag(mode)
         }
       }
       .labelsHidden()
       .pickerStyle(.segmented)
-      .frame(width: 164)
+      .frame(width: 205)
 
       Divider()
         .frame(height: 18)
 
-      Text(projection.axisDescription)
+      Text(viewMode.axisDescription)
         .font(.caption.monospaced())
         .foregroundStyle(.secondary)
         .frame(minWidth: 76)
@@ -790,6 +803,18 @@ private struct SelectedTrackerPanel: View {
         PositionValue(axis: "Z", value: tracker.position.z)
       }
 
+      HStack(spacing: 8) {
+        Text("前方 −Z")
+          .font(.caption.weight(.medium))
+          .foregroundStyle(.secondary)
+
+        Spacer()
+
+        DirectionComponent(axis: "X", value: forward.x)
+        DirectionComponent(axis: "Y", value: forward.y)
+        DirectionComponent(axis: "Z", value: forward.z)
+      }
+
       TrackerQualityHistory(
         history: history,
         height: usesCompactLayout ? 62 : 82
@@ -803,6 +828,26 @@ private struct SelectedTrackerPanel: View {
       .foregroundStyle(.secondary)
     }
     .accessibilityElement(children: .contain)
+  }
+
+  private var forward: Vector3 {
+    TrackerOrientationAxes(
+      orientation: tracker.orientation
+    ).forward
+  }
+}
+
+private struct DirectionComponent: View {
+  let axis: String
+  let value: Float
+
+  var body: some View {
+    Text(String(format: "%@ %.2f", axis, value))
+      .font(.caption2.monospacedDigit())
+      .foregroundStyle(.secondary)
+      .accessibilityLabel(
+        String(format: "前方%@ %.2f", axis, value)
+      )
   }
 }
 
@@ -1744,6 +1789,7 @@ private struct TrackerProjectionView: View {
       id: tracker.id,
       role: tracker.role,
       position: dragState.latestPosition,
+      orientation: tracker.orientation,
       trackingState: tracker.trackingState,
       trackingReason: tracker.trackingReason,
       liveness: tracker.liveness,
