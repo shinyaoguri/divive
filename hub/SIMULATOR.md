@@ -12,6 +12,9 @@ Tracker frameを供給する開発用sourceです。GUIから独立した`HubSim
 - `static`、`circle`、`walk`、`jump`、`random` motion
 - seed付きframe loss
 - seed付きTracker単位のtracking lost
+- 固定delay、±jitter、隣接frameのreordering
+- 継続時間付きdisconnect
+- 最大1,024 frameの有界な配信障害pipeline
 - `AssembledPoseFrame`を`HubFrameSink`へ直接入力
 - 最大64台を指定できるCLI
 
@@ -45,11 +48,40 @@ tracking_reason = simulated_fault
 connected       = true
 ```
 
-確率はframeごと、tracking lostはTrackerごとに独立して評価します。継続時間を
-明示するfault scriptは後続範囲です。
+確率はframeごと、tracking lostはTrackerごとに独立して評価します。
 
 source設定が`connected = false`または`disconnected`の場合、tracking lost注入で
 上書きしません。
+
+### 配信経路の障害
+
+姿勢生成器とHub入力境界の間に`SimulatorTransportFaultPipeline`を置きます。
+motion、frame loss、tracking lostは`SimulatorEngine`、delay、jitter、reordering、
+disconnectは配信pipelineの責務です。
+
+```text
+SimulatorEngine
+  → frame loss / tracking lost
+  → SimulatorTransportFaultPipeline
+      → delay / jitter / reordering / disconnect
+  → HubStateStore.apply()
+```
+
+delayは固定値、jitterは`delay ± jitter`の範囲でseedから決定し、負の配信遅延は0へ
+丸めます。reordering対象frameは2周期余分に保留し、次のframeを先に配信します。
+連続する2 frameを同時にreordering対象にしないため、確率1でも隣接frameの逆転を
+確実に再現できます。逆転して遅れて届いた古いframeは、実運用と同じ
+`HubStateStore`のstale判定で拒否されます。
+
+disconnectは指定確率で開始し、`disconnect-ms`の間は新規frameを破棄します。
+開始前から保留していたframeも破棄し、切断復帰後に古い姿勢をburst配信しません。
+既存のHub latest stateは保持されるため、既定では受信停止から250msで`lost`、
+2秒で`disconnected`へ遷移します。
+
+配信待ちqueueは最大1,024 frameです。上限到達時は最も古いsequenceを捨てて最新値を
+優先し、`overflow`として計数します。これは障害試験用の意図的な有界queueであり、
+通常のHub配信経路に姿勢履歴queueを追加するものではありません。pipeline用乱数は
+motion/tracking faultとは別のseed系列を使います。
 
 ## CLI
 
@@ -88,11 +120,19 @@ swift run divive-simulator \
   --rate 120 \
   --frame-loss 0.05 \
   --tracking-lost 0.10 \
+  --delay-ms 25 \
+  --jitter-ms 8 \
+  --reordering 0.03 \
+  --disconnect 0.002 \
+  --disconnect-ms 2500 \
   --seed 42
 ```
 
-確率は0〜1です。1秒ごとと終了時にattempted / emitted / dropped、
-deadline miss、simulated / lost / disconnected Tracker数を表示します。
+確率は0〜1、時間は0以上の整数ミリ秒です。`--disconnect`が0より大きい場合、
+`--disconnect-ms`は1以上にします。1秒ごとと終了時にattempted / emitted /
+dropped / stale、disconnect回数と破棄数、pending / overflow、deadline miss、
+simulated / lost / disconnected Tracker数を表示します。有限frameを指定した場合は、
+最後の配信待ちframeを排出してから終了します。
 `--print-pose`はframeごとの先頭Tracker姿勢を確認するときだけ使用します。
 
 CLIが生成する既定role:
@@ -118,9 +158,16 @@ var simulator = try SimulatorEngine(
 
 switch try simulator.step(receivedMonotonicNS: now) {
 case .emitted(let frame):
-  hubStateStore.apply(frame)
+  for delivered in transport.advance(
+    toMonotonicNS: now,
+    offering: frame
+  ) {
+    hubStateStore.apply(delivered)
+  }
 case .dropped:
-  break
+  for delivered in transport.advance(toMonotonicNS: now) {
+    hubStateStore.apply(delivered)
+  }
 }
 ```
 
@@ -131,10 +178,10 @@ Quaternion、各motionの負値・非有限値・0以下の周波数は拒否し
 ## 今回含まないもの
 
 - GUIからの数値編集とscene永続化
-- delay、jitter、reordering、disconnect fault
 - fault scriptの保存・読み込み
 - WebSocket、Unityなど外部contentへの配信
 
 SwiftUIの開発用GUIは[GUI.md](GUI.md)でHeadless APIへ接続し、UDP Network sourceと
 切り替えられます。現在の空間表示は上面図であり、3D表示と個別Tracker編集は後続範囲
-です。次段階では障害注入を同じ固定seed modelへ追加します。
+です。次段階ではRecorder / Playbackまたはcontent向け配信を同じHub入力境界へ
+接続します。

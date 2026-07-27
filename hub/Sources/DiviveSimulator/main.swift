@@ -20,6 +20,11 @@ private struct Options {
   var motion: MotionOption = .stationary
   var frameLossProbability = 0.0
   var trackingLostProbability = 0.0
+  var delayMilliseconds: UInt64 = 0
+  var jitterMilliseconds: UInt64 = 0
+  var reorderingProbability = 0.0
+  var disconnectProbability = 0.0
+  var disconnectDurationMilliseconds: UInt64 = 2_500
   var printPose = false
 
   static func parse(_ arguments: [String]) throws -> Self {
@@ -83,6 +88,41 @@ private struct Options {
           index: index,
           option: "--tracking-lost"
         )
+      case "--delay-ms":
+        index += 1
+        options.delayMilliseconds = try parseDuration(
+          arguments,
+          index: index,
+          option: "--delay-ms"
+        )
+      case "--jitter-ms":
+        index += 1
+        options.jitterMilliseconds = try parseDuration(
+          arguments,
+          index: index,
+          option: "--jitter-ms"
+        )
+      case "--reordering":
+        index += 1
+        options.reorderingProbability = try parseProbability(
+          arguments,
+          index: index,
+          option: "--reordering"
+        )
+      case "--disconnect":
+        index += 1
+        options.disconnectProbability = try parseProbability(
+          arguments,
+          index: index,
+          option: "--disconnect"
+        )
+      case "--disconnect-ms":
+        index += 1
+        options.disconnectDurationMilliseconds = try parseDuration(
+          arguments,
+          index: index,
+          option: "--disconnect-ms"
+        )
       case "--print-pose":
         options.printPose = true
       case "--help", "-h":
@@ -112,6 +152,22 @@ private struct Options {
     }
     return value
   }
+
+  private static func parseDuration(
+    _ arguments: [String],
+    index: Int,
+    option: String
+  ) throws -> UInt64 {
+    guard index < arguments.count else {
+      throw OptionError.missingValue(option)
+    }
+    guard let value = UInt64(arguments[index]),
+      value <= UInt64.max / 1_000_000
+    else {
+      throw OptionError.invalidDuration(option)
+    }
+    return value
+  }
 }
 
 private enum OptionError: Error, CustomStringConvertible {
@@ -122,6 +178,7 @@ private enum OptionError: Error, CustomStringConvertible {
   case invalidSeed
   case invalidMotion
   case invalidProbability(String)
+  case invalidDuration(String)
   case unknownArgument(String)
 
   var description: String {
@@ -135,6 +192,8 @@ private enum OptionError: Error, CustomStringConvertible {
       "--motion はstatic、circle、walk、jump、randomのいずれかです"
     case .invalidProbability(let option):
       "\(option) は0〜1の小数で指定してください"
+    case .invalidDuration(let option):
+      "\(option) は0以上の整数（ミリ秒）で指定してください"
     case .unknownArgument(let argument): "不明な引数です: \(argument)"
     }
   }
@@ -153,6 +212,11 @@ private func printUsage() {
                              既定値: static
       --frame-loss RATE      frame drop確率。0〜1、既定値: 0
       --tracking-lost RATE   Trackerごとのlost確率。0〜1、既定値: 0
+      --delay-ms MS          固定配信遅延。既定値: 0
+      --jitter-ms MS         配信遅延の±jitter。既定値: 0
+      --reordering RATE      隣接frameの順序逆転確率。0〜1、既定値: 0
+      --disconnect RATE      接続断開始確率。0〜1、既定値: 0
+      --disconnect-ms MS     1回の接続断時間。既定値: 2500
       --print-pose           emitted frameごとの姿勢を表示
     """
   )
@@ -245,7 +309,9 @@ private func printStatistics(
   attemptedFrames: UInt64,
   emittedFrames: UInt64,
   droppedFrames: UInt64,
+  staleFrames: UInt64,
   missedDeadlines: UInt64,
+  transport: SimulatorTransportFaultStatistics,
   store: HubStateStore,
   monotonicNS: UInt64
 ) {
@@ -255,9 +321,14 @@ private func printStatistics(
   let disconnected = state.trackers.count { $0.trackingState == .disconnected }
   print(
     "attempted=\(attemptedFrames) emitted=\(emittedFrames) "
-      + "dropped=\(droppedFrames) missed_deadlines=\(missedDeadlines) "
+      + "dropped=\(droppedFrames) stale=\(staleFrames) "
+      + "disconnect_events=\(transport.disconnectEvents) "
+      + "disconnect_dropped=\(transport.disconnectedFrames) "
+      + "pending=\(transport.pendingFrames) "
+      + "overflow=\(transport.overflowFrames) "
+      + "missed_deadlines=\(missedDeadlines) "
       + "trackers=\(state.trackers.count) simulated=\(simulated) "
-      + "lost=\(lost) disconnected=\(disconnected)"
+      + "lost=\(lost) trackers_disconnected=\(disconnected)"
   )
 }
 
@@ -279,6 +350,19 @@ do {
     trackers: makeTrackers(options),
     faults: faults
   )
+  let frameIntervalNS = 1_000_000_000 / UInt64(options.rate.rawValue)
+  var transport = try SimulatorTransportFaultPipeline(
+    configuration: SimulatorTransportFaultConfiguration(
+      seed: options.seed ^ 0x7472_616e_7370_6f72,
+      delayNS: options.delayMilliseconds * 1_000_000,
+      jitterNS: options.jitterMilliseconds * 1_000_000,
+      reorderingProbability: options.reorderingProbability,
+      disconnectProbability: options.disconnectProbability,
+      disconnectDurationNS:
+        options.disconnectDurationMilliseconds * 1_000_000
+    ),
+    frameIntervalNS: frameIntervalNS
+  )
   let store = HubStateStore()
   let sink: any HubFrameSink = store
   let stopFlag = StopFlag()
@@ -295,34 +379,66 @@ do {
   )
   print("終了するにはControl-Cを押してください")
 
-  let frameIntervalNS = 1_000_000_000 / UInt64(options.rate.rawValue)
-  var nextDeadlineNS = DispatchTime.now().uptimeNanoseconds
+  var nextGenerationNS = DispatchTime.now().uptimeNanoseconds
   var attemptedFrames: UInt64 = 0
   var emittedFrames: UInt64 = 0
   var droppedFrames: UInt64 = 0
+  var staleFrames: UInt64 = 0
   var missedDeadlines: UInt64 = 0
-  var lastReportedAttemptedFrames: UInt64?
 
   while !stopFlag.isStopped,
     options.frames == 0 || attemptedFrames < options.frames
+      || transport.statistics.pendingFrames > 0
   {
+    let shouldContinueGenerating =
+      options.frames == 0 || attemptedFrames < options.frames
+    let nextWakeNS = min(
+      shouldContinueGenerating ? nextGenerationNS : UInt64.max,
+      transport.nextDeliveryMonotonicNS ?? UInt64.max
+    )
     let beforeWait = DispatchTime.now().uptimeNanoseconds
-    if beforeWait < nextDeadlineNS {
+    if beforeWait < nextWakeNS {
       Thread.sleep(
-        forTimeInterval: Double(nextDeadlineNS - beforeWait) / 1_000_000_000
+        forTimeInterval: Double(nextWakeNS - beforeWait) / 1_000_000_000
       )
     }
     let receivedNS = DispatchTime.now().uptimeNanoseconds
-    if receivedNS > nextDeadlineNS + frameIntervalNS {
-      missedDeadlines += 1
+
+    var generatedFrame: AssembledPoseFrame?
+    let shouldGenerate =
+      shouldContinueGenerating && receivedNS >= nextGenerationNS
+    if shouldGenerate {
+      let (missThreshold, thresholdOverflow) =
+        nextGenerationNS.addingReportingOverflow(frameIntervalNS)
+      if thresholdOverflow || receivedNS > missThreshold {
+        missedDeadlines += 1
+        nextGenerationNS = receivedNS
+      }
+      let step = try simulator.step(receivedMonotonicNS: receivedNS)
+      attemptedFrames += 1
+      switch step {
+      case .emitted(let frame):
+        generatedFrame = frame
+      case .dropped:
+        droppedFrames += 1
+      }
+      let (advancedGeneration, generationOverflow) =
+        nextGenerationNS.addingReportingOverflow(frameIntervalNS)
+      nextGenerationNS =
+        generationOverflow ? UInt64.max : advancedGeneration
     }
 
-    let step = try simulator.step(receivedMonotonicNS: receivedNS)
-    attemptedFrames += 1
-    switch step {
-    case .emitted(let frame):
-      _ = sink.apply(frame)
-      emittedFrames += 1
+    let deliveredFrames = transport.advance(
+      toMonotonicNS: receivedNS,
+      offering: generatedFrame
+    )
+    for frame in deliveredFrames {
+      switch sink.apply(frame) {
+      case .applied:
+        emittedFrames += 1
+      case .stale:
+        staleFrames += 1
+      }
       if options.printPose {
         let first = frame.poseBatch.trackers.first
         print(
@@ -332,38 +448,36 @@ do {
             + "z=\(first?.position.z ?? 0)"
         )
       }
-    case .dropped:
-      droppedFrames += 1
     }
 
-    if attemptedFrames.isMultiple(of: UInt64(options.rate.rawValue)) {
+    if shouldGenerate,
+      attemptedFrames.isMultiple(of: UInt64(options.rate.rawValue))
+    {
       printStatistics(
         attemptedFrames: attemptedFrames,
         emittedFrames: emittedFrames,
         droppedFrames: droppedFrames,
+        staleFrames: staleFrames,
         missedDeadlines: missedDeadlines,
+        transport: transport.statistics,
         store: store,
         monotonicNS: receivedNS
       )
-      lastReportedAttemptedFrames = attemptedFrames
     }
 
-    let (advancedDeadline, overflow) =
-      nextDeadlineNS.addingReportingOverflow(frameIntervalNS)
-    nextDeadlineNS = overflow ? receivedNS : advancedDeadline
   }
 
   interruptSource.cancel()
-  if lastReportedAttemptedFrames != attemptedFrames {
-    printStatistics(
-      attemptedFrames: attemptedFrames,
-      emittedFrames: emittedFrames,
-      droppedFrames: droppedFrames,
-      missedDeadlines: missedDeadlines,
-      store: store,
-      monotonicNS: DispatchTime.now().uptimeNanoseconds
-    )
-  }
+  printStatistics(
+    attemptedFrames: attemptedFrames,
+    emittedFrames: emittedFrames,
+    droppedFrames: droppedFrames,
+    staleFrames: staleFrames,
+    missedDeadlines: missedDeadlines,
+    transport: transport.statistics,
+    store: store,
+    monotonicNS: DispatchTime.now().uptimeNanoseconds
+  )
   print("divive-simulatorを終了しました")
 } catch {
   fputs("起動できませんでした: \(error)\n", stderr)

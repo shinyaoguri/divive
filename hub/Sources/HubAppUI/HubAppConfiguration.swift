@@ -23,6 +23,7 @@ public enum HubAppMotionPreset: String, CaseIterable, Identifiable, Sendable {
 
 public enum HubAppConfigurationError: Error, Equatable, Sendable {
   case trackerCountOutOfRange
+  case invalidDuration(HubAppDurationField)
 }
 
 /// GUIの入力値を、決定論的なHeadless Simulator設定へ変換する。
@@ -33,6 +34,11 @@ public struct HubAppConfiguration: Equatable, Sendable {
   public let seed: UInt64
   public let frameLossProbability: Double
   public let trackingLostProbability: Double
+  public let delayMilliseconds: Double
+  public let jitterMilliseconds: Double
+  public let reorderingProbability: Double
+  public let disconnectProbability: Double
+  public let disconnectDurationMilliseconds: Double
 
   public init(
     trackerCount: Int,
@@ -40,7 +46,12 @@ public struct HubAppConfiguration: Equatable, Sendable {
     motion: HubAppMotionPreset,
     seed: UInt64,
     frameLossProbability: Double,
-    trackingLostProbability: Double
+    trackingLostProbability: Double,
+    delayMilliseconds: Double = 0,
+    jitterMilliseconds: Double = 0,
+    reorderingProbability: Double = 0,
+    disconnectProbability: Double = 0,
+    disconnectDurationMilliseconds: Double = 2_500
   ) {
     self.trackerCount = trackerCount
     self.rate = rate
@@ -48,6 +59,11 @@ public struct HubAppConfiguration: Equatable, Sendable {
     self.seed = seed
     self.frameLossProbability = frameLossProbability
     self.trackingLostProbability = trackingLostProbability
+    self.delayMilliseconds = delayMilliseconds
+    self.jitterMilliseconds = jitterMilliseconds
+    self.reorderingProbability = reorderingProbability
+    self.disconnectProbability = disconnectProbability
+    self.disconnectDurationMilliseconds = disconnectDurationMilliseconds
   }
 
   public func makeSimulator() throws -> SimulatorEngine {
@@ -69,6 +85,32 @@ public struct HubAppConfiguration: Equatable, Sendable {
       source: source,
       trackers: makeTrackers(),
       faults: faults
+    )
+  }
+
+  public func makeTransportFaultPipeline() throws
+    -> SimulatorTransportFaultPipeline
+  {
+    let frameIntervalNS = 1_000_000_000 / UInt64(rate.rawValue)
+    return try SimulatorTransportFaultPipeline(
+      configuration: SimulatorTransportFaultConfiguration(
+        seed: seed ^ 0x7472_616e_7370_6f72,
+        delayNS: try nanoseconds(
+          fromMilliseconds: delayMilliseconds,
+          field: .delay
+        ),
+        jitterNS: try nanoseconds(
+          fromMilliseconds: jitterMilliseconds,
+          field: .jitter
+        ),
+        reorderingProbability: reorderingProbability,
+        disconnectProbability: disconnectProbability,
+        disconnectDurationNS: try nanoseconds(
+          fromMilliseconds: disconnectDurationMilliseconds,
+          field: .disconnectDuration
+        )
+      ),
+      frameIntervalNS: frameIntervalNS
     )
   }
 
@@ -100,6 +142,19 @@ public struct HubAppConfiguration: Equatable, Sendable {
         motion: motionPreset(for: index)
       )
     }
+  }
+
+  private func nanoseconds(
+    fromMilliseconds milliseconds: Double,
+    field: HubAppDurationField
+  ) throws -> UInt64 {
+    guard milliseconds.isFinite,
+      milliseconds >= 0,
+      milliseconds <= Double(UInt64.max) / 1_000_000
+    else {
+      throw HubAppConfigurationError.invalidDuration(field)
+    }
+    return UInt64((milliseconds * 1_000_000).rounded())
   }
 
   private func role(for index: Int) -> String {
@@ -142,4 +197,10 @@ public struct HubAppConfiguration: Equatable, Sendable {
       )
     }
   }
+}
+
+public enum HubAppDurationField: Equatable, Sendable {
+  case delay
+  case jitter
+  case disconnectDuration
 }

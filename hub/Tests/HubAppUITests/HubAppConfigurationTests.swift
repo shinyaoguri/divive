@@ -119,6 +119,54 @@ final class HubAppConfigurationTests: XCTestCase {
     XCTAssertTrue(xPositions.allSatisfy { abs($0) <= 2 })
   }
 
+  func testGUI設定から配信障害pipelineを生成する() throws {
+    let configuration = HubAppConfiguration(
+      trackerCount: 3,
+      rate: .hz120,
+      motion: .circle,
+      seed: 42,
+      frameLossProbability: 0.1,
+      trackingLostProbability: 0.2,
+      delayMilliseconds: 12.5,
+      jitterMilliseconds: 3.5,
+      reorderingProbability: 0.3,
+      disconnectProbability: 0.4,
+      disconnectDurationMilliseconds: 2_500
+    )
+
+    let pipeline = try configuration.makeTransportFaultPipeline()
+
+    XCTAssertEqual(pipeline.frameIntervalNS, 8_333_333)
+    XCTAssertEqual(pipeline.configuration.delayNS, 12_500_000)
+    XCTAssertEqual(pipeline.configuration.jitterNS, 3_500_000)
+    XCTAssertEqual(pipeline.configuration.reorderingProbability, 0.3)
+    XCTAssertEqual(pipeline.configuration.disconnectProbability, 0.4)
+    XCTAssertEqual(
+      pipeline.configuration.disconnectDurationNS,
+      2_500_000_000
+    )
+  }
+
+  func testGUIの負の配信時間を拒否する() {
+    let configuration = HubAppConfiguration(
+      trackerCount: 3,
+      rate: .hz90,
+      motion: .stationary,
+      seed: 1,
+      frameLossProbability: 0,
+      trackingLostProbability: 0,
+      delayMilliseconds: -1
+    )
+
+    XCTAssertThrowsError(try configuration.makeTransportFaultPipeline()) {
+      error in
+      XCTAssertEqual(
+        error as? HubAppConfigurationError,
+        .invalidDuration(.delay)
+      )
+    }
+  }
+
   func testRuntimeは生成を開始停止できる() async throws {
     let runtime = SimulatorRuntime()
     try await runtime.start(

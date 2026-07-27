@@ -8,6 +8,8 @@ public struct SimulatorRuntimeMetrics: Equatable, Sendable {
   public let attemptedFrames: UInt64
   public let emittedFrames: UInt64
   public let droppedFrames: UInt64
+  public let staleFrames: UInt64
+  public let transport: SimulatorTransportFaultStatistics
   public let missedDeadlines: UInt64
   public let lastError: String?
 }
@@ -23,6 +25,7 @@ public struct SimulatorRuntimeSnapshot: Sendable {
 /// 描画eventをqueueせず、consumerは必要な頻度でlatest snapshotを取得する。
 public actor SimulatorRuntime {
   private var simulator: SimulatorEngine?
+  private var transport: SimulatorTransportFaultPipeline?
   private var store = HubStateStore()
   private var runTask: Task<Void, Never>?
   private var runID: UInt64 = 0
@@ -30,6 +33,7 @@ public actor SimulatorRuntime {
   private var attemptedFrames: UInt64 = 0
   private var emittedFrames: UInt64 = 0
   private var droppedFrames: UInt64 = 0
+  private var staleFrames: UInt64 = 0
   private var missedDeadlines: UInt64 = 0
   private var lastError: String?
 
@@ -41,10 +45,12 @@ public actor SimulatorRuntime {
     let currentRunID = runID
 
     simulator = try configuration.makeSimulator()
+    transport = try configuration.makeTransportFaultPipeline()
     store = HubStateStore()
     attemptedFrames = 0
     emittedFrames = 0
     droppedFrames = 0
+    staleFrames = 0
     missedDeadlines = 0
     lastError = nil
     isRunning = true
@@ -71,6 +77,9 @@ public actor SimulatorRuntime {
         attemptedFrames: attemptedFrames,
         emittedFrames: emittedFrames,
         droppedFrames: droppedFrames,
+        staleFrames: staleFrames,
+        transport: transport?.statistics
+          ?? SimulatorTransportFaultStatistics(),
         missedDeadlines: missedDeadlines,
         lastError: lastError
       ),
@@ -79,14 +88,19 @@ public actor SimulatorRuntime {
   }
 
   private func run(id: UInt64, intervalNS: UInt64) async {
-    var nextDeadlineNS = DispatchTime.now().uptimeNanoseconds
+    var nextGenerationNS = DispatchTime.now().uptimeNanoseconds
 
     while !Task.isCancelled, id == runID {
+      guard let currentTransport = transport else { break }
+      let nextWakeNS = min(
+        nextGenerationNS,
+        currentTransport.nextDeliveryMonotonicNS ?? UInt64.max
+      )
       let beforeWaitNS = DispatchTime.now().uptimeNanoseconds
-      if beforeWaitNS < nextDeadlineNS {
+      if beforeWaitNS < nextWakeNS {
         do {
           try await Task.sleep(
-            nanoseconds: nextDeadlineNS - beforeWaitNS
+            nanoseconds: nextWakeNS - beforeWaitNS
           )
         } catch {
           break
@@ -95,40 +109,63 @@ public actor SimulatorRuntime {
       guard !Task.isCancelled, id == runID else { break }
 
       let receivedNS = DispatchTime.now().uptimeNanoseconds
-      if receivedNS > nextDeadlineNS + intervalNS {
-        missedDeadlines += 1
-        // 遅延分をburstで追い掛けず、常に現在時刻から再開する。
-        nextDeadlineNS = receivedNS
-      }
+      let shouldGenerate = receivedNS >= nextGenerationNS
 
       do {
-        guard var currentSimulator = simulator else { break }
-        let step = try currentSimulator.step(
-          receivedMonotonicNS: receivedNS
+        guard var currentSimulator = simulator,
+          var currentTransport = transport
+        else { break }
+        var offeredFrame: AssembledPoseFrame?
+
+        if shouldGenerate {
+          if receivedNS > saturatingAdd(nextGenerationNS, intervalNS) {
+            missedDeadlines += 1
+            // 遅延分をburstで追い掛けず、常に現在時刻から再開する。
+            nextGenerationNS = receivedNS
+          }
+          let step = try currentSimulator.step(
+            receivedMonotonicNS: receivedNS
+          )
+          simulator = currentSimulator
+          attemptedFrames += 1
+          switch step {
+          case .emitted(let frame):
+            offeredFrame = frame
+          case .dropped:
+            droppedFrames += 1
+          }
+
+          nextGenerationNS = saturatingAdd(nextGenerationNS, intervalNS)
+        }
+
+        let deliveredFrames = currentTransport.advance(
+          toMonotonicNS: receivedNS,
+          offering: offeredFrame
         )
-        simulator = currentSimulator
-        attemptedFrames += 1
-        switch step {
-        case .emitted(let frame):
-          _ = store.apply(frame)
-          emittedFrames += 1
-        case .dropped:
-          droppedFrames += 1
+        transport = currentTransport
+        for frame in deliveredFrames {
+          switch store.apply(frame) {
+          case .applied:
+            emittedFrames += 1
+          case .stale:
+            staleFrames += 1
+          }
         }
       } catch {
         lastError = String(describing: error)
         isRunning = false
         break
       }
-
-      let (advancedDeadline, overflow) =
-        nextDeadlineNS.addingReportingOverflow(intervalNS)
-      nextDeadlineNS = overflow ? receivedNS : advancedDeadline
     }
 
     if id == runID {
       isRunning = false
       runTask = nil
     }
+  }
+
+  private func saturatingAdd(_ left: UInt64, _ right: UInt64) -> UInt64 {
+    let (result, overflow) = left.addingReportingOverflow(right)
+    return overflow ? UInt64.max : result
   }
 }
