@@ -52,7 +52,6 @@ private struct TrackerRealityPreview: View {
   @StateObject private var scene = TrackerRealityScene()
   @State private var navigationTool: SimulatorViewportTool = .moveTracker
   @State private var dragOrigin: SimulatorViewportCamera?
-  @State private var dragTool: SimulatorViewportTool?
   @State private var trackerDragState: SpatialTrackerDragState?
   @State private var magnificationOrigin: SimulatorViewportCamera?
   @State private var modifierKeys: EventModifiers = []
@@ -86,10 +85,10 @@ private struct TrackerRealityPreview: View {
           }
       )
       .simultaneousGesture(
-        trackerDragGesture(viewportSize: geometry.size)
+        trackerDragGesture
       )
       .simultaneousGesture(
-        dragGesture(viewportSize: geometry.size)
+        orbitGesture
       )
       .simultaneousGesture(magnificationGesture)
       .background {
@@ -105,6 +104,29 @@ private struct TrackerRealityPreview: View {
             endRadius: 620
           )
         }
+      }
+      .overlay {
+        ViewportMouseInputView(
+          onScroll: { deltaY, hasPreciseDeltas in
+            guard effectiveNavigationTool == .navigate else {
+              return
+            }
+            viewportCamera = viewportCamera.applyingScroll(
+              deltaY: deltaY,
+              hasPreciseDeltas: hasPreciseDeltas
+            )
+          },
+          onMiddleDrag: { translation in
+            guard effectiveNavigationTool == .navigate else {
+              return
+            }
+            viewportCamera = viewportCamera.applyingPan(
+              translation: translation,
+              viewportSize: geometry.size
+            )
+          }
+        )
+        .accessibilityHidden(true)
       }
       .overlay(alignment: .bottomLeading) {
         TrackerOrientationLegend()
@@ -124,7 +146,7 @@ private struct TrackerRealityPreview: View {
       .accessibilityLabel("Trackerの3D姿勢プレビュー")
       .accessibilityValue(accessibilityValue)
       .onModifierKeysChanged(
-        mask: [.option, .command, .control]
+        mask: [.option]
       ) { _, newValue in
         modifierKeys = newValue
       }
@@ -136,9 +158,7 @@ private struct TrackerRealityPreview: View {
       ?? trackers.first
   }
 
-  private func trackerDragGesture(
-    viewportSize: CGSize
-  ) -> some Gesture {
+  private var trackerDragGesture: some Gesture {
     DragGesture(minimumDistance: 0, coordinateSpace: .local)
       .targetedToAnyEntity()
       .onChanged { value in
@@ -147,7 +167,40 @@ private struct TrackerRealityPreview: View {
             isEditable,
             effectiveNavigationTool == .moveTracker,
             let trackerID = scene.trackerID(for: value.entity),
-            let tracker = trackers.first(where: { $0.id == trackerID })
+            let tracker = trackers.first(where: { $0.id == trackerID }),
+            let coordinateSpace = value.entity.parent,
+            let startRay = value.ray(
+              through: value.startLocation,
+              in: .local,
+              to: coordinateSpace
+            )
+          else {
+            return
+          }
+
+          let transform = SimulatorSceneTransform(workspace: workspace)
+          let trackerPoint = transform.point(for: tracker.position)
+          let plane = SimulatorPointerPlane(
+            point: trackerPoint,
+            normal: Vector3(
+              x: startRay.direction.x,
+              y: startRay.direction.y,
+              z: startRay.direction.z
+            )
+          )
+          guard
+            let grabbedPoint = plane.intersection(
+              rayOrigin: Vector3(
+                x: startRay.origin.x,
+                y: startRay.origin.y,
+                z: startRay.origin.z
+              ),
+              rayDirection: Vector3(
+                x: startRay.direction.x,
+                y: startRay.direction.y,
+                z: startRay.direction.z
+              )
+            )
           else {
             return
           }
@@ -155,8 +208,13 @@ private struct TrackerRealityPreview: View {
           selectedTrackerID = trackerID
           trackerDragState = SpatialTrackerDragState(
             trackerID: trackerID,
-            originalPosition: tracker.position,
-            camera: viewportCamera
+            coordinateSpace: coordinateSpace,
+            plane: plane,
+            grabOffset: Vector3(
+              x: trackerPoint.x - grabbedPoint.x,
+              y: trackerPoint.y - grabbedPoint.y,
+              z: trackerPoint.z - grabbedPoint.z
+            )
           )
           onMoveBegan(trackerID, tracker.position)
         }
@@ -167,16 +225,38 @@ private struct TrackerRealityPreview: View {
           || abs(value.translation.height) > 0.1
         guard didMove else { return }
 
-        let transform = SimulatorSpatialDragTransform(
-          workspace: workspace,
-          camera: trackerDragState.camera,
-          viewportSize: viewportSize
+        guard
+          let ray = value.ray(
+            through: value.location,
+            in: .local,
+            to: trackerDragState.coordinateSpace
+          ),
+          let pointerPoint = trackerDragState.plane.intersection(
+            rayOrigin: Vector3(
+              x: ray.origin.x,
+              y: ray.origin.y,
+              z: ray.origin.z
+            ),
+            rayDirection: Vector3(
+              x: ray.direction.x,
+              y: ray.direction.y,
+              z: ray.direction.z
+            )
+          )
+        else {
+          return
+        }
+
+        let transform = SimulatorSceneTransform(workspace: workspace)
+        let resolved = transform.position(
+          for: Vector3(
+            x: pointerPoint.x + trackerDragState.grabOffset.x,
+            y: pointerPoint.y + trackerDragState.grabOffset.y,
+            z: pointerPoint.z + trackerDragState.grabOffset.z
+          )
         )
-        let position = transform.position(
-          from: trackerDragState.originalPosition,
-          translation: value.translation,
-          clampsToWorkspace: clampsToWorkspace
-        )
+        let position =
+          clampsToWorkspace ? workspace.clamped(resolved) : resolved
         onMoveChanged(trackerDragState.trackerID, position)
       }
       .onEnded { _ in
@@ -186,42 +266,31 @@ private struct TrackerRealityPreview: View {
       }
   }
 
-  private func dragGesture(viewportSize: CGSize) -> some Gesture {
+  private var orbitGesture: some Gesture {
     DragGesture(minimumDistance: 3)
       .onChanged { value in
+        guard effectiveNavigationTool == .navigate else { return }
         let origin = dragOrigin ?? viewportCamera
         if dragOrigin == nil {
           dragOrigin = origin
-          dragTool = effectiveNavigationTool
         }
-        viewportCamera = origin.applyingDrag(
-          translation: value.translation,
-          viewportSize: viewportSize,
-          tool: dragTool ?? navigationTool
+        viewportCamera = origin.applyingOrbit(
+          translation: value.translation
         )
       }
       .onEnded { _ in
         dragOrigin = nil
-        dragTool = nil
       }
   }
 
   private var effectiveNavigationTool: SimulatorViewportTool {
-    guard modifierKeys.contains(.option) else {
-      return navigationTool
-    }
-    if modifierKeys.contains(.command) {
-      return .pan
-    }
-    if modifierKeys.contains(.control) {
-      return .zoom
-    }
-    return .orbit
+    modifierKeys.contains(.option) ? .navigate : navigationTool
   }
 
   private var magnificationGesture: some Gesture {
     MagnifyGesture()
       .onChanged { value in
+        guard effectiveNavigationTool == .navigate else { return }
         let origin = magnificationOrigin ?? viewportCamera
         if magnificationOrigin == nil {
           magnificationOrigin = origin
@@ -270,9 +339,8 @@ extension SimulatorViewportTool {
   fileprivate var helpText: String {
     switch self {
     case .moveTracker: "Trackerを掴んで画面に沿って移動"
-    case .orbit: "視点回転：ドラッグ、または⌥ドラッグ"
-    case .pan: "視点移動：ドラッグ、または⌥⌘ドラッグ"
-    case .zoom: "ズーム：ドラッグ、⌥⌃ドラッグ、またはピンチ"
+    case .navigate:
+      "視点操作：左ドラッグで回転、中ドラッグで移動、ホイールで拡大縮小"
     }
   }
 }
@@ -348,7 +416,7 @@ extension SimulatorViewportTool {
   fileprivate var statusText: String {
     switch self {
     case .moveTracker: "Trackerをドラッグ"
-    case .orbit, .pan, .zoom: "\(displayName)・空間をドラッグ"
+    case .navigate: "左: 回転  中: 移動  ホイール: 拡大縮小"
     }
   }
 }
@@ -381,8 +449,116 @@ private struct ViewportToolButtonStyle: ButtonStyle {
 
 private struct SpatialTrackerDragState {
   let trackerID: String
-  let originalPosition: Vector3
-  let camera: SimulatorViewportCamera
+  let coordinateSpace: Entity
+  let plane: SimulatorPointerPlane
+  let grabOffset: Vector3
+}
+
+/// SwiftUIが直接公開しないwheelとmiddle-button dragをRealityViewへ渡す。
+///
+/// 左buttonはhit testを透過し、RealityKitのTracker選択とSwiftUI dragを妨げない。
+private struct ViewportMouseInputView: NSViewRepresentable {
+  let onScroll: (CGFloat, Bool) -> Void
+  let onMiddleDrag: (CGSize) -> Void
+
+  func makeNSView(context: Context) -> ViewportMouseInputNSView {
+    let view = ViewportMouseInputNSView()
+    view.onScroll = onScroll
+    view.onMiddleDrag = onMiddleDrag
+    return view
+  }
+
+  func updateNSView(
+    _ nsView: ViewportMouseInputNSView,
+    context: Context
+  ) {
+    nsView.onScroll = onScroll
+    nsView.onMiddleDrag = onMiddleDrag
+  }
+
+  static func dismantleNSView(
+    _ nsView: ViewportMouseInputNSView,
+    coordinator: Void
+  ) {
+    nsView.invalidate()
+  }
+}
+
+private final class ViewportMouseInputNSView: NSView {
+  var onScroll: ((CGFloat, Bool) -> Void)?
+  var onMiddleDrag: ((CGSize) -> Void)?
+  private var eventMonitor: Any?
+  private var isMiddleDragging = false
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    removeEventMonitor()
+    guard window != nil else { return }
+
+    eventMonitor = NSEvent.addLocalMonitorForEvents(
+      matching: [
+        .scrollWheel,
+        .otherMouseDown,
+        .otherMouseDragged,
+        .otherMouseUp,
+      ]
+    ) { [weak self] event in
+      self?.handle(event) ?? event
+    }
+  }
+
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    nil
+  }
+
+  private func handle(_ event: NSEvent) -> NSEvent? {
+    guard
+      let window,
+      event.window === window
+    else {
+      return event
+    }
+    let isPointerInside = bounds.contains(
+      convert(event.locationInWindow, from: nil)
+    )
+
+    switch event.type {
+    case .scrollWheel where isPointerInside:
+      onScroll?(
+        event.scrollingDeltaY,
+        event.hasPreciseScrollingDeltas
+      )
+      return nil
+    case .otherMouseDown
+    where event.buttonNumber == 2 && isPointerInside:
+      isMiddleDragging = true
+      return nil
+    case .otherMouseDragged
+    where event.buttonNumber == 2 && isMiddleDragging:
+      // AppKitのY差分は上が正なので、SwiftUI dragの下が正へ揃える。
+      onMiddleDrag?(
+        CGSize(width: event.deltaX, height: -event.deltaY)
+      )
+      return nil
+    case .otherMouseUp
+    where event.buttonNumber == 2 && isMiddleDragging:
+      isMiddleDragging = false
+      return nil
+    default:
+      return event
+    }
+  }
+
+  func invalidate() {
+    isMiddleDragging = false
+    removeEventMonitor()
+  }
+
+  private func removeEventMonitor() {
+    guard let eventMonitor else { return }
+    NSEvent.removeMonitor(eventMonitor)
+    self.eventMonitor = nil
+  }
 }
 
 private struct TrackerOrientationLegend: View {

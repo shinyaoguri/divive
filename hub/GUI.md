@@ -153,9 +153,10 @@ jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipeli
 ### Trackerのマウス操作
 
 既定の`3D`表示では「Tracker移動」が選択されています。SimulatorのTrackerを直接
-ドラッグすると、掴んだ位置を保ったまま現在の視点に平行な面を移動します。斜めの視点では
-画面上の動きを視点回転とzoomからcanonical XYZへ逆変換するため、X、Y、Zを組み合わせた
-直感的な配置ができます。
+ドラッグすると、掴んだ位置を保ったまま現在の視点に平行な面を移動します。
+RealityKitの実際のポインタ光線と固定したドラッグ面の交点から位置を求めるため、
+斜め視点や拡大縮小後もTrackerがポインタへ画面上で追従します。X、Y、Zを
+組み合わせた直感的な配置ができます。
 
 1軸を固定した精密編集では、上面・正面・側面へ切り替えてTrackerをドラッグします。
 選択中の投影面に対応する2軸だけを変更し、残りの1軸を保持します。
@@ -182,16 +183,18 @@ jitter、reordering、disconnectは姿勢生成後の有界な配信障害pipeli
 
 macOS 15以降ではRealityKitの`RealityView`を使い、作業空間、床grid、Trackerを
 3D表示します。右上の方向cubeは`Y`上面、`-Z`正面、`X`側面へ切り替え、`3D`で
-透視表示へ戻します。下部のnavigation barではTracker移動、視点回転、視点移動、
-ズームの意味を明示してからdragできます。Trackerをクリックすると右インスペクタの
+透視表示へ戻します。下部のnavigation barでは、Trackerの直接操作とUnityに近い
+視点操作を2つのmodeとして切り替えます。Trackerをクリックすると右インスペクタの
 選択も同期します。
 
-| 操作 | toolbar | Unity互換shortcut |
+| mode | 操作 | 入力 |
 | --- | --- | --- |
-| Trackerを直接移動 | Tracker移動を選択し、Trackerをdrag | — |
-| turntable回転 | 視点回転を選択して空間をdrag | Option + drag |
-| 画面内移動 | 視点移動を選択して空間をdrag | Option + Command + drag |
-| zoom | ズームを選択して上下drag | Option + Control + drag、またはpinch |
+| Tracker移動 | Trackerを掴んだまま画面に沿って直接移動 | Trackerを左ドラッグ |
+| 視点操作 | turntable回転 | 空間を左ドラッグ |
+| 視点操作 | 画面内の平行移動 | ホイール／中ボタンを押したままドラッグ |
+| 視点操作 | 拡大縮小 | ホイール、2本指スクロール、またはピンチ |
+
+Tracker移動中もOptionを押している間だけ、一時的に視点操作へ切り替えられます。
 
 Tracker移動はSimulator実行中だけ有効です。UDP受信時はposeを観測するだけで、
 Hubから実機Trackerの位置を書き換えません。3Dの画面平面移動でも作業空間への制限と
@@ -300,8 +303,7 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - Windows実機Bridgeとの有線LAN結合検証
 - mDNS discovery、sender allowlist、HMAC、control channel
 - clock mapping、network jitter、one-way latency推定
-- 3D空間でのTracker位置ドラッグと3軸gizmo
-- mouse wheel zoomとmiddle mouse button pan
+- 1軸・2軸を拘束する3軸gizmo
 - TrackerごとのID、role、回転編集と数値による位置編集
 - 複数段階のUndo/Redo、キーボードによる位置微調整
 - scene保存・読み込み

@@ -236,7 +236,8 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
 - [x] 上面・正面・側面の直交投影によるSimulator XYZマウス操作
 - [x] 0.25〜1,000mの有限作業空間、自動fit、境界clamp、単一Undo
 - [x] RealityKitによる3D pose、Quaternion方向軸、camera orbit表示
-- [x] 方向cube、turntable orbit、pan、zoom、Frame Selected / All
+- [x] 方向cube、左drag orbit、中button pan、wheel / 2本指zoom、
+  Frame Selected / All
 - [x] 3D空間での視点平面に沿ったTracker直接移動
 - [ ] 1軸・2軸を拘束する3軸gizmo
 - [x] tracking、lost、disconnected、simulated

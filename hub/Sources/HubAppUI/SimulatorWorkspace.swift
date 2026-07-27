@@ -1,7 +1,6 @@
 import CoreGraphics
 import Foundation
 import HubProtocol
-import simd
 
 public enum SimulatorStageViewMode: String, CaseIterable, Identifiable,
   Sendable
@@ -41,32 +40,26 @@ public enum SimulatorStageViewMode: String, CaseIterable, Identifiable,
   }
 }
 
-/// 3D viewportのdrag操作。選択中のtoolを常に表示し、gestureの意味を曖昧にしない。
+/// 3D viewportの左dragがTracker操作か視点操作かを明示するmode。
 public enum SimulatorViewportTool: String, CaseIterable, Identifiable,
   Sendable
 {
   case moveTracker
-  case orbit
-  case pan
-  case zoom
+  case navigate
 
   public var id: Self { self }
 
   public var displayName: String {
     switch self {
     case .moveTracker: "Tracker移動"
-    case .orbit: "視点回転"
-    case .pan: "視点移動"
-    case .zoom: "ズーム"
+    case .navigate: "視点操作"
     }
   }
 
   public var symbolName: String {
     switch self {
     case .moveTracker: "move.3d"
-    case .orbit: "rotate.3d"
-    case .pan: "hand.draw"
-    case .zoom: "plus.magnifyingglass"
+    case .navigate: "rotate.3d"
     }
   }
 }
@@ -102,35 +95,41 @@ public struct SimulatorViewportCamera: Equatable, Sendable {
     self.pivot = pivot
   }
 
-  public func applyingDrag(
+  public func applyingOrbit(translation: CGSize) -> Self {
+    var next = self
+    next.yawDegrees = yawDegrees + Float(translation.width) * 0.32
+    next.pitchDegrees = min(
+      85,
+      max(-85, pitchDegrees + Float(translation.height) * 0.32)
+    )
+    return next
+  }
+
+  public func applyingPan(
     translation: CGSize,
-    viewportSize: CGSize,
-    tool: SimulatorViewportTool
+    viewportSize: CGSize
   ) -> Self {
     var next = self
-    switch tool {
-    case .moveTracker:
-      break
-    case .orbit:
-      next.yawDegrees = yawDegrees + Float(translation.width) * 0.32
-      next.pitchDegrees = min(
-        85,
-        max(-85, pitchDegrees + Float(translation.height) * 0.32)
-      )
-    case .pan:
-      let width = max(Float(viewportSize.width), 1)
-      let height = max(Float(viewportSize.height), 1)
-      next.panX =
-        panX + Float(translation.width) / width
-        * 0.9
-      next.panY =
-        panY - Float(translation.height) / height
-        * 0.9
-    case .zoom:
-      next.zoom = Self.clampZoom(
-        zoom * exp(-Float(translation.height) * 0.008)
-      )
-    }
+    let width = max(Float(viewportSize.width), 1)
+    let height = max(Float(viewportSize.height), 1)
+    next.panX =
+      panX + Float(translation.width) / width
+      * 0.9
+    next.panY =
+      panY - Float(translation.height) / height
+      * 0.9
+    return next
+  }
+
+  public func applyingScroll(
+    deltaY: CGFloat,
+    hasPreciseDeltas: Bool
+  ) -> Self {
+    var next = self
+    let sensitivity: Float = hasPreciseDeltas ? 0.012 : 0.12
+    next.zoom = Self.clampZoom(
+      zoom * exp(Float(deltaY) * sensitivity)
+    )
     return next
   }
 
@@ -169,61 +168,58 @@ public struct SimulatorViewportCamera: Equatable, Sendable {
   }
 }
 
-/// 画面上のdrag量を、現在の3D視点に平行なcanonical XYZ差分へ変換する。
+/// RealityKitのpointer rayと固定された視点平面の交点を求める。
 ///
-/// 視点の回転とzoomを逆適用するため、斜め視点でもTrackerがpointerへ1:1で追従する。
-/// 奥行きを含む1軸の精密編集は、方向cubeから切り替える直交viewが担う。
-public struct SimulatorSpatialDragTransform: Equatable, Sendable {
-  public static let viewportSpan: Float = 0.9
-
-  public let workspace: SimulatorWorkspaceDimensions
-  public let camera: SimulatorViewportCamera
-  public let viewportSize: CGSize
+/// drag開始時のTracker中心を通り、開始rayへ正対する平面を固定することで、
+/// pointerとTrackerの画面上の移動量をRealityKitの実投影に一致させる。
+public struct SimulatorPointerPlane: Equatable, Sendable {
+  public let point: Vector3
+  public let normal: Vector3
 
   public init(
-    workspace: SimulatorWorkspaceDimensions,
-    camera: SimulatorViewportCamera,
-    viewportSize: CGSize
+    point: Vector3,
+    normal: Vector3
   ) {
-    self.workspace = workspace
-    self.camera = camera
-    self.viewportSize = viewportSize
+    self.point = point
+    self.normal = normal
   }
 
-  public func position(
-    from originalPosition: Vector3,
-    translation: CGSize,
-    clampsToWorkspace: Bool
-  ) -> Vector3 {
-    let width = max(Float(viewportSize.width), 1)
-    let height = max(Float(viewportSize.height), 1)
-    let viewDelta = SIMD3<Float>(
-      Float(translation.width) / width * Self.viewportSpan / camera.zoom,
-      -Float(translation.height) / height * Self.viewportSpan / camera.zoom,
-      0
-    )
+  public func intersection(
+    rayOrigin: Vector3,
+    rayDirection: Vector3
+  ) -> Vector3? {
+    let denominator = dot(rayDirection, normal)
+    guard
+      isFinite(point),
+      isFinite(normal),
+      isFinite(rayOrigin),
+      isFinite(rayDirection),
+      abs(denominator) > 0.000_001
+    else {
+      return nil
+    }
 
-    let radiansPerDegree = Float.pi / 180
-    let yaw = simd_quatf(
-      angle: camera.yawDegrees * radiansPerDegree,
-      axis: SIMD3(0, 1, 0)
+    let offset = Vector3(
+      x: point.x - rayOrigin.x,
+      y: point.y - rayOrigin.y,
+      z: point.z - rayOrigin.z
     )
-    let pitch = simd_quatf(
-      angle: camera.pitchDegrees * radiansPerDegree,
-      axis: SIMD3(1, 0, 0)
-    )
-    let sceneDelta = (pitch * yaw).inverse.act(viewDelta)
-    let sceneTransform = SimulatorSceneTransform(workspace: workspace)
-    let origin = sceneTransform.point(for: originalPosition)
-    let resolved = sceneTransform.position(
-      for: Vector3(
-        x: origin.x + sceneDelta.x,
-        y: origin.y + sceneDelta.y,
-        z: origin.z + sceneDelta.z
-      )
-    )
+    let distance = dot(offset, normal) / denominator
+    guard distance.isFinite else { return nil }
 
-    return clampsToWorkspace ? workspace.clamped(resolved) : resolved
+    return Vector3(
+      x: rayOrigin.x + rayDirection.x * distance,
+      y: rayOrigin.y + rayDirection.y * distance,
+      z: rayOrigin.z + rayDirection.z * distance
+    )
+  }
+
+  private func dot(_ lhs: Vector3, _ rhs: Vector3) -> Float {
+    lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z
+  }
+
+  private func isFinite(_ value: Vector3) -> Bool {
+    value.x.isFinite && value.y.isFinite && value.z.isFinite
   }
 }
 

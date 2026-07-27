@@ -232,114 +232,73 @@ final class SimulatorWorkspaceTests: XCTestCase {
   func test3DViewportのtoolを明示する() {
     XCTAssertEqual(
       SimulatorViewportTool.allCases.map(\.displayName),
-      ["Tracker移動", "視点回転", "視点移動", "ズーム"]
+      ["Tracker移動", "視点操作"]
     )
   }
 
-  func testTracker移動toolはcameraを変更しない() {
-    let camera = SimulatorViewportCamera()
-
-    XCTAssertEqual(
-      camera.applyingDrag(
-        translation: CGSize(width: 200, height: 100),
-        viewportSize: CGSize(width: 800, height: 600),
-        tool: .moveTracker
-      ),
-      camera
+  func testPointerRayと視点平面の交点を求める() throws {
+    let plane = SimulatorPointerPlane(
+      point: Vector3(x: 0, y: 0, z: -2),
+      normal: Vector3(x: 0, y: 0, z: -1)
     )
+    let intersection = try XCTUnwrap(
+      plane.intersection(
+        rayOrigin: Vector3(x: 0, y: 0, z: 0),
+        rayDirection: Vector3(x: 0.25, y: -0.5, z: -1)
+      )
+    )
+
+    XCTAssertEqual(intersection.x, 0.5, accuracy: 0.000_1)
+    XCTAssertEqual(intersection.y, -1, accuracy: 0.000_1)
+    XCTAssertEqual(intersection.z, -2, accuracy: 0.000_1)
   }
 
-  func test3DDragを視点平面上のcanonical座標へ変換する() throws {
-    let workspace = try SimulatorWorkspaceDimensions(
-      widthMeters: 4,
-      heightMeters: 4,
-      depthMeters: 4
+  func testPointerPlaneは掴んだoffsetを維持できる() throws {
+    let trackerPoint = Vector3(x: 0, y: 0, z: -2)
+    let plane = SimulatorPointerPlane(
+      point: trackerPoint,
+      normal: Vector3(x: 0, y: 0, z: -1)
     )
-    let transform = SimulatorSpatialDragTransform(
-      workspace: workspace,
-      camera: SimulatorViewportCamera(
-        yawDegrees: 0,
-        pitchDegrees: 0
-      ),
-      viewportSize: CGSize(width: 900, height: 900)
+    let grabbed = try XCTUnwrap(
+      plane.intersection(
+        rayOrigin: Vector3(x: 0, y: 0, z: 0),
+        rayDirection: Vector3(x: 0.25, y: 0, z: -1)
+      )
     )
-
-    let position = transform.position(
-      from: Vector3(x: 0, y: 2, z: 0),
-      translation: CGSize(width: 175, height: 175),
-      clampsToWorkspace: false
+    let current = try XCTUnwrap(
+      plane.intersection(
+        rayOrigin: Vector3(x: 0, y: 0, z: 0),
+        rayDirection: Vector3(x: 0.5, y: 0, z: -1)
+      )
     )
-
-    XCTAssertEqual(position.x, 1, accuracy: 0.000_1)
-    XCTAssertEqual(position.y, 1, accuracy: 0.000_1)
-    XCTAssertEqual(position.z, 0, accuracy: 0.000_1)
+    let grabOffsetX = trackerPoint.x - grabbed.x
+    XCTAssertEqual(current.x + grabOffsetX, 0.5, accuracy: 0.000_1)
+    XCTAssertEqual(current.z, trackerPoint.z, accuracy: 0.000_1)
   }
 
-  func test3DDragは視点回転を逆変換して奥行きを変更する() throws {
-    let workspace = try SimulatorWorkspaceDimensions(
-      widthMeters: 4,
-      heightMeters: 4,
-      depthMeters: 4
+  func testPointerPlaneは平行rayと非有限値を拒否する() {
+    let plane = SimulatorPointerPlane(
+      point: Vector3(x: 0, y: 0, z: -2),
+      normal: Vector3(x: 0, y: 0, z: -1)
     )
-    let transform = SimulatorSpatialDragTransform(
-      workspace: workspace,
-      camera: SimulatorViewportCamera(
-        yawDegrees: 90,
-        pitchDegrees: 0
-      ),
-      viewportSize: CGSize(width: 900, height: 900)
+    XCTAssertNil(
+      plane.intersection(
+        rayOrigin: Vector3(x: 0, y: 0, z: 0),
+        rayDirection: Vector3(x: 1, y: 0, z: 0)
+      )
     )
-
-    let position = transform.position(
-      from: Vector3(x: 0, y: 2, z: 0),
-      translation: CGSize(width: 175, height: 0),
-      clampsToWorkspace: false
+    XCTAssertNil(
+      plane.intersection(
+        rayOrigin: Vector3(x: .nan, y: 0, z: 0),
+        rayDirection: Vector3(x: 0, y: 0, z: -1)
+      )
     )
-
-    XCTAssertEqual(position.x, 0, accuracy: 0.000_1)
-    XCTAssertEqual(position.y, 2, accuracy: 0.000_1)
-    XCTAssertEqual(position.z, 1, accuracy: 0.000_1)
-  }
-
-  func test3DDragはZoomと作業空間制限を反映する() throws {
-    let workspace = try SimulatorWorkspaceDimensions(
-      widthMeters: 4,
-      heightMeters: 4,
-      depthMeters: 4
-    )
-    let transform = SimulatorSpatialDragTransform(
-      workspace: workspace,
-      camera: SimulatorViewportCamera(
-        yawDegrees: 0,
-        pitchDegrees: 0,
-        zoom: 2
-      ),
-      viewportSize: CGSize(width: 900, height: 900)
-    )
-
-    let unclamped = transform.position(
-      from: Vector3(x: 0, y: 2, z: 0),
-      translation: CGSize(width: 175, height: 175),
-      clampsToWorkspace: false
-    )
-    XCTAssertEqual(unclamped.x, 0.5, accuracy: 0.000_1)
-    XCTAssertEqual(unclamped.y, 1.5, accuracy: 0.000_1)
-
-    let clamped = transform.position(
-      from: Vector3(x: 2, y: 0, z: 0),
-      translation: CGSize(width: 900, height: 900),
-      clampsToWorkspace: true
-    )
-    XCTAssertEqual(clamped.x, 2, accuracy: 0.000_1)
-    XCTAssertEqual(clamped.y, 0, accuracy: 0.000_1)
   }
 
   func testOrbitは水平を維持して上下角を制限する() {
     let camera = SimulatorViewportCamera()
-    let moved = camera.applyingDrag(
-      translation: CGSize(width: 100, height: 1_000),
-      viewportSize: CGSize(width: 800, height: 600),
-      tool: .orbit
+    let moved = camera.applyingOrbit(
+      translation: CGSize(width: 100, height: 1_000)
     )
 
     XCTAssertEqual(
@@ -354,18 +313,20 @@ final class SimulatorWorkspaceTests: XCTestCase {
 
   func testPanとZoomをviewport範囲内で更新する() {
     let camera = SimulatorViewportCamera()
-    let panned = camera.applyingDrag(
+    let panned = camera.applyingPan(
       translation: CGSize(width: 80, height: 60),
-      viewportSize: CGSize(width: 800, height: 600),
-      tool: .pan
+      viewportSize: CGSize(width: 800, height: 600)
     )
     XCTAssertEqual(panned.panX, 0.09, accuracy: 0.000_1)
     XCTAssertEqual(panned.panY, -0.09, accuracy: 0.000_1)
 
-    let zoomedOut = camera.applyingDrag(
-      translation: CGSize(width: 0, height: 10_000),
-      viewportSize: CGSize(width: 800, height: 600),
-      tool: .zoom
+    let zoomedOut = camera.applyingScroll(
+      deltaY: -1_000,
+      hasPreciseDeltas: true
+    )
+    let wheelZoomedIn = camera.applyingScroll(
+      deltaY: 1_000,
+      hasPreciseDeltas: true
     )
     let zoomedIn = camera.applyingMagnification(100)
     XCTAssertEqual(
@@ -375,6 +336,20 @@ final class SimulatorWorkspaceTests: XCTestCase {
     XCTAssertEqual(
       zoomedIn.zoom,
       SimulatorViewportCamera.maximumZoom
+    )
+    XCTAssertEqual(
+      wheelZoomedIn.zoom,
+      SimulatorViewportCamera.maximumZoom
+    )
+    XCTAssertGreaterThan(
+      camera.applyingScroll(
+        deltaY: 1,
+        hasPreciseDeltas: false
+      ).zoom,
+      camera.applyingScroll(
+        deltaY: 1,
+        hasPreciseDeltas: true
+      ).zoom
     )
   }
 
