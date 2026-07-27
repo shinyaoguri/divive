@@ -84,6 +84,7 @@ Bridgeは複数台接続できます。各Bridgeの追跡空間は独立して�
 
 | 文書 | 内容 |
 | --- | --- |
+| [開発引き継ぎ](docs/handoff.md) | 現在地、未完了事項、別端末・別agentへの再開手順 |
 | [ドキュメント一覧](docs/README.md) | 文書の入口と更新ルール |
 | [要求仕様](docs/requirements.md) | 要求、性能目標、前提、traceability |
 | [アーキテクチャ](docs/architecture.md) | コンポーネント、データフロー、障害設計 |
