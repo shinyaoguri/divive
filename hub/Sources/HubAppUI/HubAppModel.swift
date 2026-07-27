@@ -92,6 +92,7 @@ public final class HubAppModel: ObservableObject {
   @Published public private(set) var simulatorWorkspace =
     SimulatorWorkspaceDimensions.default
   @Published public var clampsSimulatorToWorkspace = true
+  @Published public var showsSimulatorBaseStations = true
   @Published public private(set) var canUndoSimulatorMove = false
 
   @Published public private(set) var activeSource: HubInputSource?

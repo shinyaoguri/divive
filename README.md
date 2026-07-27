@@ -126,7 +126,8 @@ Hub入力へ供給します。
 Quaternionの向きとlocal -Z前方をRealityKit 3D表示で確認できます。方向cubeと
 turntable orbit、pan、zoom、作業空間の全体表示を備え、3Dでは画面に沿った直接移動、
 上面・正面・側面では2軸の精密編集ができます。Simulator実行中は、任意の有限作業空間を
-自動fitしながらTrackerのXYZ位置をマウス操作できます。現段階では開発用実行形式です。
+自動fitしながらTrackerのXYZ位置をマウス操作し、仮想Base Station 2台の設置関係も
+確認できます。現段階では開発用実行形式です。
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz

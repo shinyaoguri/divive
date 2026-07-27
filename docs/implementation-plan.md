@@ -312,6 +312,7 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] 幅・高さ・奥行きが独立した有限作業空間と自動fit
 - [x] perspective 3D表示、Quaternionのlocal -Z前方、camera orbit
 - [x] Unity / Blender型の方向cube、pan、zoom、作業空間の全体表示
+- [x] 仮想Base Station 2台の3D・直交表示と表示切替
 - [x] 3D視点平面での直接位置編集、作業空間clamp、単一Undo
 - [ ] 1軸・2軸を拘束する3軸gizmo
 - [ ] scene保存、複数Undo/Redo、キーボード微調整

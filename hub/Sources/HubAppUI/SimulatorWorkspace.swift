@@ -248,6 +248,60 @@ public enum SimulatorWorkspaceDimensionsError: Error, Equatable, Sendable {
   case invalidDepth
 }
 
+/// Simulatorだけで表示するBase Stationの静的な参照姿勢。
+///
+/// Tracker poseや品質統計には混ぜず、作業空間の設置関係を理解するために使う。
+public struct SimulatorBaseStation: Equatable, Identifiable, Sendable {
+  public let id: String
+  public let displayName: String
+  public let position: Vector3
+  public let target: Vector3
+
+  public init(
+    id: String,
+    displayName: String,
+    position: Vector3,
+    target: Vector3
+  ) {
+    self.id = id
+    self.displayName = displayName
+    self.position = position
+    self.target = target
+  }
+
+  public static func defaultPair(
+    in workspace: SimulatorWorkspaceDimensions
+  ) -> [Self] {
+    let halfWidth = Float(workspace.widthMeters / 2)
+    let halfDepth = Float(workspace.depthMeters / 2)
+    let height = Float(workspace.heightMeters)
+    let target = Vector3(x: 0, y: height * 0.35, z: 0)
+
+    return [
+      SimulatorBaseStation(
+        id: "sim://base-station/001",
+        displayName: "B1",
+        position: Vector3(
+          x: -halfWidth * 0.88,
+          y: height * 0.82,
+          z: halfDepth * 0.88
+        ),
+        target: target
+      ),
+      SimulatorBaseStation(
+        id: "sim://base-station/002",
+        displayName: "B2",
+        position: Vector3(
+          x: halfWidth * 0.88,
+          y: height * 0.82,
+          z: -halfDepth * 0.88
+        ),
+        target: target
+      ),
+    ]
+  }
+}
+
 /// Simulator stageで表示・編集する有限な作業空間。
 ///
 /// X/Zは原点を中心、Yは床面0mからheightまでを表示する。上限は描画精度と

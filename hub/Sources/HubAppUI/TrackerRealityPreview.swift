@@ -6,6 +6,7 @@ import SwiftUI
 /// Quaternionと位置を同時に確認し、Trackerを直接移動できる3D preview。
 struct TrackerSpatialPreview: View {
   let trackers: [TrackerDisplayState]
+  let baseStations: [SimulatorBaseStation]
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
   @Binding var viewportCamera: SimulatorViewportCamera
@@ -19,6 +20,7 @@ struct TrackerSpatialPreview: View {
     if #available(macOS 15.0, *) {
       TrackerRealityPreview(
         trackers: trackers,
+        baseStations: baseStations,
         workspace: workspace,
         selectedTrackerID: $selectedTrackerID,
         viewportCamera: $viewportCamera,
@@ -41,6 +43,7 @@ struct TrackerSpatialPreview: View {
 @available(macOS 15.0, *)
 private struct TrackerRealityPreview: View {
   let trackers: [TrackerDisplayState]
+  let baseStations: [SimulatorBaseStation]
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
   @Binding var viewportCamera: SimulatorViewportCamera
@@ -62,6 +65,7 @@ private struct TrackerRealityPreview: View {
         scene.install(in: &content)
         scene.synchronize(
           trackers: trackers,
+          baseStations: baseStations,
           workspace: workspace,
           selectedTrackerID: selectedTrackerID,
           viewportCamera: viewportCamera
@@ -70,6 +74,7 @@ private struct TrackerRealityPreview: View {
         scene.install(in: &content)
         scene.synchronize(
           trackers: trackers,
+          baseStations: baseStations,
           workspace: workspace,
           selectedTrackerID: selectedTrackerID,
           viewportCamera: viewportCamera
@@ -572,9 +577,11 @@ private final class TrackerRealityScene: ObservableObject {
   private let navigationRoot = Entity()
   private let contentRoot = Entity()
   private let stageRoot = Entity()
+  private let baseStationRoot = Entity()
   private let trackerRoot = Entity()
   private let cameraTarget = Entity()
   private var trackerEntities: [String: TrackerEntityParts] = [:]
+  private var baseStationEntities: [String: BaseStationEntityParts] = [:]
   private var renderedWorkspace: SimulatorWorkspaceDimensions?
 
   init() {
@@ -582,6 +589,7 @@ private final class TrackerRealityScene: ObservableObject {
     navigationRoot.name = "viewport-navigation"
     contentRoot.name = "viewport-content"
     stageRoot.name = "stage"
+    baseStationRoot.name = "base-stations"
     trackerRoot.name = "trackers"
     cameraTarget.name = "camera-target"
     // 仮想cameraは原点から−Zを見るため、sceneを前方へ離して配置する。
@@ -592,6 +600,7 @@ private final class TrackerRealityScene: ObservableObject {
     root.addChild(cameraTarget)
     navigationRoot.addChild(contentRoot)
     contentRoot.addChild(stageRoot)
+    contentRoot.addChild(baseStationRoot)
     contentRoot.addChild(trackerRoot)
   }
 
@@ -605,6 +614,7 @@ private final class TrackerRealityScene: ObservableObject {
 
   func synchronize(
     trackers: [TrackerDisplayState],
+    baseStations: [SimulatorBaseStation],
     workspace: SimulatorWorkspaceDimensions,
     selectedTrackerID: String?,
     viewportCamera: SimulatorViewportCamera
@@ -614,6 +624,10 @@ private final class TrackerRealityScene: ObservableObject {
       rebuildStage(transform: transform)
       renderedWorkspace = workspace
     }
+    synchronizeBaseStations(
+      baseStations,
+      transform: transform
+    )
 
     let liveTrackerIDs = Set(trackers.map(\.id))
     for trackerID in trackerEntities.keys
@@ -636,6 +650,30 @@ private final class TrackerRealityScene: ObservableObject {
     }
 
     updateViewport(viewportCamera)
+  }
+
+  private func synchronizeBaseStations(
+    _ baseStations: [SimulatorBaseStation],
+    transform: SimulatorSceneTransform
+  ) {
+    let liveIDs = Set(baseStations.map(\.id))
+    for baseStationID in baseStationEntities.keys
+    where !liveIDs.contains(baseStationID) {
+      baseStationEntities.removeValue(forKey: baseStationID)?
+        .root.removeFromParent()
+    }
+
+    for baseStation in baseStations {
+      let parts =
+        baseStationEntities[baseStation.id]
+        ?? makeBaseStation(id: baseStation.id)
+      baseStationEntities[baseStation.id] = parts
+      update(
+        parts,
+        baseStation: baseStation,
+        transform: transform
+      )
+    }
   }
 
   func trackerID(for entity: Entity) -> String? {
@@ -792,6 +830,92 @@ private final class TrackerRealityScene: ObservableObject {
         material: UnlitMaterial(color: .systemBlue)
       )
     )
+  }
+
+  private func makeBaseStation(id: String) -> BaseStationEntityParts {
+    let station = Entity()
+    station.name = "base-station:\(id)"
+
+    let body = ModelEntity(
+      mesh: .generateBox(
+        size: SIMD3(0.04, 0.04, 0.02),
+        cornerRadius: 0.004
+      ),
+      materials: [
+        SimpleMaterial(color: .darkGray, isMetallic: false)
+      ]
+    )
+    station.addChild(body)
+
+    let front = box(
+      size: SIMD3(0.032, 0.032, 0.002),
+      position: SIMD3(0, 0, -0.011),
+      material: translucentMaterial(
+        color: .systemOrange,
+        opacity: 0.32
+      )
+    )
+    station.addChild(front)
+
+    let status = ModelEntity(
+      mesh: .generateSphere(radius: 0.003),
+      materials: [UnlitMaterial(color: .systemGreen)]
+    )
+    status.position = SIMD3(0.012, 0.012, -0.013)
+    station.addChild(status)
+
+    let forwardShaft = box(
+      size: SIMD3(0.0025, 0.0025, 0.055),
+      position: SIMD3(0, 0, -0.04),
+      material: translucentMaterial(
+        color: .systemOrange,
+        opacity: 0.58
+      )
+    )
+    station.addChild(forwardShaft)
+
+    let forwardHead = ModelEntity(
+      mesh: .generateCone(height: 0.012, radius: 0.006),
+      materials: [
+        translucentMaterial(
+          color: .systemOrange,
+          opacity: 0.72
+        )
+      ]
+    )
+    forwardHead.position = SIMD3(0, 0, -0.073)
+    forwardHead.orientation = simd_quatf(
+      angle: -.pi / 2,
+      axis: SIMD3(1, 0, 0)
+    )
+    station.addChild(forwardHead)
+
+    baseStationRoot.addChild(station)
+    return BaseStationEntityParts(root: station)
+  }
+
+  private func update(
+    _ parts: BaseStationEntityParts,
+    baseStation: SimulatorBaseStation,
+    transform: SimulatorSceneTransform
+  ) {
+    let point = transform.point(for: baseStation.position)
+    let target = transform.point(for: baseStation.target)
+    let position = SIMD3(point.x, point.y, point.z)
+    let direction = SIMD3(
+      target.x - point.x,
+      target.y - point.y,
+      target.z - point.z
+    )
+
+    parts.root.position = position
+    if simd_length_squared(direction) > 0.000_001 {
+      parts.root.orientation = simd_quatf(
+        from: SIMD3(0, 0, -1),
+        to: simd_normalize(direction)
+      )
+    }
+    parts.root.scale = SIMD3(repeating: 1.25)
   }
 
   private func makeTracker(id: String) -> TrackerEntityParts {
@@ -953,6 +1077,15 @@ private final class TrackerEntityParts {
     self.rightAxis = rightAxis
     self.upAxis = upAxis
     self.selection = selection
+  }
+}
+
+@available(macOS 15.0, *)
+private final class BaseStationEntityParts {
+  let root: Entity
+
+  init(root: Entity) {
+    self.root = root
   }
 }
 

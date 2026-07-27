@@ -141,6 +141,7 @@ Sourceを開始または切り替えた時点で履歴と累積値の基準をre
 - Simulatorの開始、設定を反映した再起動、停止
 - Tracker数が増えても、初期位置を既定の4m幅へ収める自動間隔
 - 3D表示でTrackerを掴み、現在の視点に平行な面へ直接移動
+- 対角上部から中心を向く仮想Base Station 2台の3D・直交表示
 - 上面・正面・側面を切り替えたマウスドラッグによるXYZ位置編集
 - 幅・高さ・奥行きを個別指定する0.25〜1,000mの作業空間と自動fit
 - 作業空間への位置制限、直前の移動のUndo
@@ -212,6 +213,12 @@ metre値やcalibrationには影響しません。
 各Trackerは向きを読み違えにくい非対称形状とし、青い矢印をlocal `-Z`前方として
 表示します。選択Trackerには赤い`+X`、緑の`+Y`も表示し、右インスペクタには
 Quaternionから求めた前方vectorのX/Y/Z成分を表示します。
+
+Simulatorでは仮想Base Station `B1` / `B2`を作業空間の対角上部へ配置し、
+中心方向を向く黒い本体と橙色の方向表示で可視化します。上面・正面・側面では
+橙色の破線で中心方向を示します。作業空間設定の「ベースステーションを表示」で
+表示を切り替えられます。これらは設置関係を確認する静的な参照設備であり、
+Tracker一覧、pose frame、品質統計、録画対象には含めません。
 
 ここでいう前方は共通pose規約のlocal `-Z`です。物理VIVE Trackerのロゴ面や装着対象の
 「前」と一致するとは限らず、装着offsetやcalibration profileは別に適用する必要が
@@ -302,6 +309,7 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - Windows実機Bridgeとの有線LAN結合検証
 - mDNS discovery、sender allowlist、HMAC、control channel
 - clock mapping、network jitter、one-way latency推定
+- Windows Bridgeからの実機Base Station pose受信
 - 1軸・2軸を拘束する3軸gizmo
 - TrackerごとのID、role、回転編集と数値による位置編集
 - 複数段階のUndo/Redo、キーボードによる位置微調整

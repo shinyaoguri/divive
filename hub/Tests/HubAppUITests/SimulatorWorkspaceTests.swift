@@ -83,6 +83,32 @@ final class SimulatorWorkspaceTests: XCTestCase {
     )
   }
 
+  func testBaseStationを対角上部へ配置して中心方向を共有する() throws {
+    let workspace = try SimulatorWorkspaceDimensions(
+      widthMeters: 6,
+      heightMeters: 3,
+      depthMeters: 4
+    )
+    let baseStations = SimulatorBaseStation.defaultPair(in: workspace)
+
+    XCTAssertEqual(baseStations.map(\.displayName), ["B1", "B2"])
+    XCTAssertTrue(
+      baseStations.allSatisfy {
+        workspace.contains($0.position)
+      }
+    )
+    XCTAssertEqual(baseStations[0].position.x, -2.64, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[0].position.y, 2.46, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[0].position.z, 1.76, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[1].position.x, 2.64, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[1].position.y, 2.46, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[1].position.z, -1.76, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[0].target.x, 0, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[0].target.y, 1.05, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[0].target.z, 0, accuracy: 0.000_1)
+    XCTAssertEqual(baseStations[0].target, baseStations[1].target)
+  }
+
   func test各投影で画面座標とcanonical座標を往復する() throws {
     let workspace = try SimulatorWorkspaceDimensions(
       widthMeters: 20,

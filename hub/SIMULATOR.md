@@ -187,5 +187,7 @@ SwiftUIの開発用GUIは[GUI.md](GUI.md)でHeadless APIへ接続し、UDP Netwo
 切り替えられます。macOS 15以降ではRealityKit 3D表示でQuaternionのlocal -Z前方を
 確認できます。方向cube、turntable orbit、pan、zoom、作業空間の全体表示で視点を
 操作し、3Dの画面平面または上面・正面・側面の直交表示から個別TrackerのXYZ位置を
-マウス編集できます。1軸・2軸を拘束する3軸gizmoは後続範囲です。次段階では
-Recorder / Playbackまたはcontent向け配信を同じHub入力境界へ接続します。
+マウス編集できます。Simulator時は仮想Base Station 2台も表示できますが、
+静的なGUI参照物であり`SimulatorEngine`のTracker poseには含めません。
+1軸・2軸を拘束する3軸gizmoは後続範囲です。次段階ではRecorder / Playbackまたは
+content向け配信を同じHub入力境界へ接続します。

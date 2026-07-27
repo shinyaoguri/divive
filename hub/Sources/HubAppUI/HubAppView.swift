@@ -299,11 +299,24 @@ private struct SpatialStage: View {
     selectedTrackerID ?? model.trackers.first?.id
   }
 
+  private var baseStations: [SimulatorBaseStation] {
+    guard
+      model.displayedSource == .simulator,
+      model.showsSimulatorBaseStations
+    else {
+      return []
+    }
+    return SimulatorBaseStation.defaultPair(
+      in: model.simulatorWorkspace
+    )
+  }
+
   var body: some View {
     ZStack {
       if let projection = viewMode.projection {
         TrackerProjectionView(
           trackers: model.trackers,
+          baseStations: baseStations,
           projection: projection,
           workspace: model.simulatorWorkspace,
           selectedTrackerID: selectedTrackerBinding,
@@ -318,6 +331,7 @@ private struct SpatialStage: View {
       } else {
         TrackerSpatialPreview(
           trackers: model.trackers,
+          baseStations: baseStations,
           workspace: model.simulatorWorkspace,
           selectedTrackerID: selectedTrackerBinding,
           viewportCamera: $viewportCamera,
@@ -709,6 +723,14 @@ private struct SimulatorWorkspaceSettings: View {
         isOn: $model.clampsSimulatorToWorkspace
       )
       .font(.caption)
+
+      if model.displayedSource == .simulator {
+        Toggle(
+          "ベースステーションを表示",
+          isOn: $model.showsSimulatorBaseStations
+        )
+        .font(.caption)
+      }
 
       Text(
         "\(SimulatorWorkspaceDimensions.minimumMeters)"
@@ -1745,6 +1767,7 @@ private struct ErrorBanner: View {
 
 private struct TrackerProjectionView: View {
   let trackers: [TrackerDisplayState]
+  let baseStations: [SimulatorBaseStation]
   let projection: SimulatorStageProjection
   let workspace: SimulatorWorkspaceDimensions
   @Binding var selectedTrackerID: String?
@@ -1768,6 +1791,13 @@ private struct TrackerProjectionView: View {
           context: &context,
           transform: transform
         )
+        for baseStation in baseStations {
+          draw(
+            baseStation,
+            context: &context,
+            transform: transform
+          )
+        }
         for tracker in trackers {
           draw(
             displayedTracker(tracker),
@@ -1878,6 +1908,46 @@ private struct TrackerProjectionView: View {
         .foregroundStyle(.tertiary),
       at: CGPoint(x: plotRect.minX, y: plotRect.maxY + 10),
       anchor: .topLeading
+    )
+  }
+
+  private func draw(
+    _ baseStation: SimulatorBaseStation,
+    context: inout GraphicsContext,
+    transform: SimulatorStageTransform
+  ) {
+    let point = transform.point(for: baseStation.position)
+    let target = transform.point(for: baseStation.target)
+    var direction = Path()
+    direction.move(to: point)
+    direction.addLine(to: target)
+    context.stroke(
+      direction,
+      with: .color(.orange.opacity(0.28)),
+      style: StrokeStyle(lineWidth: 1, dash: [4, 5])
+    )
+
+    let marker = CGRect(
+      x: point.x - 7,
+      y: point.y - 7,
+      width: 14,
+      height: 14
+    )
+    context.fill(
+      Path(roundedRect: marker, cornerRadius: 3),
+      with: .color(.black.opacity(0.72))
+    )
+    context.stroke(
+      Path(roundedRect: marker, cornerRadius: 3),
+      with: .color(.orange.opacity(0.9)),
+      lineWidth: 1.5
+    )
+    context.draw(
+      Text(baseStation.displayName)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary),
+      at: CGPoint(x: point.x, y: point.y - 11),
+      anchor: .bottom
     )
   }
 
