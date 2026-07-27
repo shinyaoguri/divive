@@ -23,14 +23,31 @@ set_target_properties(
         INTERFACE_INCLUDE_DIRECTORIES "${openvr_sdk_SOURCE_DIR}/headers"
 )
 
-add_executable(
-    divive_openvr_probe
-    main.cpp
+add_library(
+    divive_openvr_backend
+    STATIC
     openvr_session.cpp
     openvr_session.hpp
     periodic_waiter.cpp
     periodic_waiter.hpp
 )
+
+target_compile_features(divive_openvr_backend PUBLIC cxx_std_20)
+target_include_directories(
+    divive_openvr_backend
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(
+    divive_openvr_backend
+    PUBLIC
+        divive_probe_core
+    PRIVATE
+        divive_openvr_sdk
+)
+divive_enable_warnings(divive_openvr_backend)
+
+add_executable(divive_openvr_probe main.cpp)
 
 set_target_properties(
     divive_openvr_probe
@@ -42,8 +59,7 @@ target_compile_features(divive_openvr_probe PRIVATE cxx_std_20)
 target_link_libraries(
     divive_openvr_probe
     PRIVATE
-        divive_probe_core
-        divive_openvr_sdk
+        divive_openvr_backend
 )
 divive_enable_warnings(divive_openvr_probe)
 

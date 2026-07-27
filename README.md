@@ -3,7 +3,7 @@
 VIVE Trackerの6DoF姿勢を、ヘッドセットなしのWindows取得機からMacへ低遅延で配信し、Unity、Unreal Engine、p5.js、独自コンテンツから共通APIで利用するためのトラッキング基盤です。
 
 > [!IMPORTANT]
-> 現在は設計・実機検証フェーズです。Tracker 3.0は`requireHmd: false`を条件にH0を通過しましたが、H1の長時間・再起動試験は未完了です。VIVE Ultimate Trackerを含むGate 0が完了するまで、取得backendの成立性を確定事項として扱いません。
+> 現在は設計・実機検証フェーズです。Tracker 3.0は`requireHmd: false`を条件にH0とH0.5を通過し、H1の長時間・再起動試験へ進んでいます。VIVE Ultimate Trackerを含むGate 0が完了するまで、取得backendの成立性を確定事項として扱いません。
 
 ## 目標
 
@@ -107,7 +107,7 @@ Bridgeは複数台接続できます。各Bridgeの追跡空間は独立して�
 
 検証結果が揃うまでは、M1以降のbackend実装を固定しません。
 
-M0用の[OpenVR実機検証probe](bridge/probes/openvr/README.md)は実装済みです。Windows x86-64 artifactをbuildし、[実機検証手順](hardware-tests/README.md)に従ってH0/H1から実行します。
+M0用の[OpenVR実機検証probe](bridge/probes/openvr/README.md)は実装済みです。Windows x86-64 artifactをbuildし、[実機検証手順](hardware-tests/README.md)に従ってH0/H1から実行します。Tracker 3.0のH0.5では120Hz要求に対して約120Hz、固定・緩速移動でkinematic discontinuity 0を確認し、H1 GOとしました。
 
 M0と並行可能な[wire protocol v1](protocol/README.md)は実装済みです。72-byte
 envelope、FlatBuffers schema、C++ codec、golden packetをprotocol conformance
@@ -128,7 +128,9 @@ Hub入力へ供給します。
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz
 送信を検証します。captureと同期socket I/Oはcapacity 1のlatest-value handoffで
-分離済みです。実機姿勢との結合はM0 backend判定後に行います。
+分離済みです。[OpenVR → UDP Bridge](bridge/tools/openvr-bridge/README.md)は、
+実機poseと同じ送信経路を接続済みで、次にWindows→Macの有線LAN結合と60分soakを
+実機で検証します。
 
 ## ライセンス
 

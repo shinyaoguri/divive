@@ -54,7 +54,23 @@ jobs:
           cmake --install build/windows-release
           --config Release
           --prefix dist/windows-tools
-      - name: Probe artifactを保存
+      - name: 配布物の内容を検証
+        shell: pwsh
+        run: |
+          $requiredFiles = @(
+            "dist/windows-tools/divive-openvr-bridge.exe",
+            "dist/windows-tools/divive-openvr-probe.exe",
+            "dist/windows-tools/openvr_api.dll",
+            "dist/windows-tools/licenses/openvr/LICENSE"
+          )
+          $missingFiles = $requiredFiles | Where-Object { -not (Test-Path $_ -PathType Leaf) }
+          if ($missingFiles.Count -gt 0) {
+            throw "配布物に必要なfileがありません: $($missingFiles -join ', ')"
+          }
+          Get-FileHash $requiredFiles -Algorithm SHA256 |
+            Select-Object Path, Hash |
+            Format-Table -AutoSize
+      - name: Windows tools artifactを保存
         uses: actions/upload-artifact@v4
         with:
           name: divive-windows-tools-x64

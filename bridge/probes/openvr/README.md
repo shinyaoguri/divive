@@ -1,6 +1,6 @@
 # OpenVR実機検証probe
 
-Windows上のSteamVRへ`VRApplication_Background`として接続し、OpenVR device inventoryとposeをJSONLへ記録します。M0のH0〜H6で使う診断用プログラムであり、production Bridgeではありません。
+Windows上のSteamVRへ`VRApplication_Background`として接続し、OpenVR device inventoryとposeをJSONLへ記録します。M0のH0〜H6で使う診断用プログラムであり、production Bridgeではありません。実機poseをMacへ送るM1 CLIは[OpenVR → UDP Bridge](../../tools/openvr-bridge/README.md)を参照してください。
 
 ## 現在の範囲
 
