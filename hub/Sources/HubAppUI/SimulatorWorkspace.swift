@@ -71,6 +71,8 @@ public enum SimulatorViewportTool: String, CaseIterable, Identifiable,
 public struct SimulatorViewportCamera: Equatable, Sendable {
   public static let minimumZoom: Float = 0.35
   public static let maximumZoom: Float = 4
+  public static let overviewYawDegrees: Float = -35
+  public static let overviewPitchDegrees: Float = -24
 
   public private(set) var yawDegrees: Float
   public private(set) var pitchDegrees: Float
@@ -80,8 +82,8 @@ public struct SimulatorViewportCamera: Equatable, Sendable {
   public private(set) var pivot: Vector3
 
   public init(
-    yawDegrees: Float = -22,
-    pitchDegrees: Float = -14,
+    yawDegrees: Float = Self.overviewYawDegrees,
+    pitchDegrees: Float = Self.overviewPitchDegrees,
     zoom: Float = 1,
     panX: Float = 0,
     panY: Float = 0,
@@ -145,15 +147,6 @@ public struct SimulatorViewportCamera: Equatable, Sendable {
     let size = SimulatorSceneTransform(workspace: workspace).workspaceSize
     return SimulatorViewportCamera(
       pivot: Vector3(x: 0, y: -size.y * 0.15, z: 0)
-    )
-  }
-
-  public func framingSelected(_ point: Vector3) -> Self {
-    SimulatorViewportCamera(
-      yawDegrees: yawDegrees,
-      pitchDegrees: pitchDegrees,
-      zoom: max(zoom, 1.8),
-      pivot: point
     )
   }
 

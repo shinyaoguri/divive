@@ -514,7 +514,7 @@ private struct ViewportOrientationGizmo: View {
           mode: .side
         )
       }
-      .frame(width: 72, height: 58)
+      .frame(width: 72, height: 64)
 
       Button {
         withAnimation(
@@ -605,9 +605,9 @@ private enum ViewportCubeFace {
 
   var labelOffset: CGSize {
     switch self {
-    case .top: CGSize(width: 0, height: -13)
-    case .front: CGSize(width: -14, height: 13)
-    case .side: CGSize(width: 14, height: 13)
+    case .top: CGSize(width: 0, height: -15)
+    case .front: CGSize(width: -14, height: 8)
+    case .side: CGSize(width: 14, height: 8)
     }
   }
 }
@@ -616,33 +616,60 @@ private struct ViewportCubeFaceShape: Shape {
   let face: ViewportCubeFace
 
   func path(in rect: CGRect) -> Path {
-    let centerX = rect.midX
-    let topY = rect.minY + 3
-    let middleY = rect.minY + 24
-    let bottomY = rect.maxY - 3
-    let leftX = rect.minX + 7
-    let rightX = rect.maxX - 7
+    let geometry = ViewportCubeGeometry(in: rect)
 
     var path = Path()
     switch face {
     case .top:
-      path.move(to: CGPoint(x: centerX, y: topY))
-      path.addLine(to: CGPoint(x: rightX, y: middleY))
-      path.addLine(to: CGPoint(x: centerX, y: middleY + 12))
-      path.addLine(to: CGPoint(x: leftX, y: middleY))
+      path.move(to: geometry.top)
+      path.addLine(to: geometry.rightShoulder)
+      path.addLine(to: geometry.center)
+      path.addLine(to: geometry.leftShoulder)
     case .front:
-      path.move(to: CGPoint(x: leftX, y: middleY))
-      path.addLine(to: CGPoint(x: centerX, y: middleY + 12))
-      path.addLine(to: CGPoint(x: centerX, y: bottomY))
-      path.addLine(to: CGPoint(x: leftX, y: bottomY - 12))
+      path.move(to: geometry.leftShoulder)
+      path.addLine(to: geometry.center)
+      path.addLine(to: geometry.bottom)
+      path.addLine(to: geometry.leftBottom)
     case .side:
-      path.move(to: CGPoint(x: centerX, y: middleY + 12))
-      path.addLine(to: CGPoint(x: rightX, y: middleY))
-      path.addLine(to: CGPoint(x: rightX, y: bottomY - 12))
-      path.addLine(to: CGPoint(x: centerX, y: bottomY))
+      path.move(to: geometry.center)
+      path.addLine(to: geometry.rightShoulder)
+      path.addLine(to: geometry.rightBottom)
+      path.addLine(to: geometry.bottom)
     }
     path.closeSubpath()
     return path
+  }
+}
+
+/// 3面が同じ7頂点を共有する等角投影の立方体。
+///
+/// 上面と側面をそれぞれ平行四辺形にし、隣接面の境界が必ず一致するようにする。
+private struct ViewportCubeGeometry {
+  let top: CGPoint
+  let leftShoulder: CGPoint
+  let center: CGPoint
+  let rightShoulder: CGPoint
+  let leftBottom: CGPoint
+  let bottom: CGPoint
+  let rightBottom: CGPoint
+
+  init(in rect: CGRect) {
+    let topY = rect.minY + 2
+    let bottomY = rect.maxY - 2
+    let slantHeight = (bottomY - topY) * 0.25
+    let shoulderY = topY + slantHeight
+    let centerY = shoulderY + slantHeight
+    let lowerY = bottomY - slantHeight
+    let leftX = rect.minX + 8
+    let rightX = rect.maxX - 8
+
+    top = CGPoint(x: rect.midX, y: topY)
+    leftShoulder = CGPoint(x: leftX, y: shoulderY)
+    center = CGPoint(x: rect.midX, y: centerY)
+    rightShoulder = CGPoint(x: rightX, y: shoulderY)
+    leftBottom = CGPoint(x: leftX, y: lowerY)
+    bottom = CGPoint(x: rect.midX, y: bottomY)
+    rightBottom = CGPoint(x: rightX, y: lowerY)
   }
 }
 

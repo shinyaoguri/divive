@@ -353,13 +353,12 @@ final class SimulatorWorkspaceTests: XCTestCase {
     )
   }
 
-  func testFrameSelectedとFrameAllでpivotを切り替える() throws {
+  func testFrameAllは斜め上の俯瞰視点へ戻す() throws {
     let workspace = try SimulatorWorkspaceDimensions(
       widthMeters: 10,
       heightMeters: 4,
       depthMeters: 8
     )
-    let selected = Vector3(x: 0.2, y: -0.1, z: 0.3)
     let camera = SimulatorViewportCamera(
       yawDegrees: 44,
       pitchDegrees: 20,
@@ -368,21 +367,23 @@ final class SimulatorWorkspaceTests: XCTestCase {
       panY: -0.1
     )
 
-    let focused = camera.framingSelected(selected)
-    XCTAssertEqual(focused.pivot, selected)
-    XCTAssertEqual(focused.yawDegrees, 44)
-    XCTAssertEqual(focused.pitchDegrees, 20)
-    XCTAssertEqual(focused.zoom, 1.8)
-    XCTAssertEqual(focused.panX, 0)
-    XCTAssertEqual(focused.panY, 0)
-
-    let framedAll = focused.framingAll(workspace: workspace)
+    let framedAll = camera.framingAll(workspace: workspace)
     let size = SimulatorSceneTransform(workspace: workspace).workspaceSize
     XCTAssertEqual(
       framedAll.pivot,
       Vector3(x: 0, y: -size.y * 0.15, z: 0)
     )
+    XCTAssertEqual(
+      framedAll.yawDegrees,
+      SimulatorViewportCamera.overviewYawDegrees
+    )
+    XCTAssertEqual(
+      framedAll.pitchDegrees,
+      SimulatorViewportCamera.overviewPitchDegrees
+    )
     XCTAssertEqual(framedAll.zoom, 1)
+    XCTAssertEqual(framedAll.panX, 0)
+    XCTAssertEqual(framedAll.panY, 0)
   }
 
   func test単位Quaternionの前方はcanonicalのマイナスZ() {

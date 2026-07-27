@@ -137,8 +137,6 @@ private struct TrackerRealityPreview: View {
           selectedTool: $navigationTool,
           effectiveTool: effectiveNavigationTool,
           canMoveTracker: isEditable,
-          canFrameSelected: selectedTracker != nil,
-          onFrameSelected: frameSelected,
           onFrameAll: frameAll
         )
         .padding(18)
@@ -304,16 +302,6 @@ private struct TrackerRealityPreview: View {
       }
   }
 
-  private func frameSelected() {
-    guard let tracker = selectedTracker else {
-      return
-    }
-    let point = SimulatorSceneTransform(
-      workspace: workspace
-    ).point(for: tracker.position)
-    viewportCamera = viewportCamera.framingSelected(point)
-  }
-
   private func frameAll() {
     viewportCamera = viewportCamera.framingAll(workspace: workspace)
   }
@@ -349,8 +337,6 @@ private struct ViewportNavigationBar: View {
   @Binding var selectedTool: SimulatorViewportTool
   let effectiveTool: SimulatorViewportTool
   let canMoveTracker: Bool
-  let canFrameSelected: Bool
-  let onFrameSelected: () -> Void
   let onFrameAll: () -> Void
 
   var body: some View {
@@ -380,14 +366,6 @@ private struct ViewportNavigationBar: View {
       Divider()
         .frame(height: 20)
         .padding(.horizontal, 3)
-
-      Button(action: onFrameSelected) {
-        Label("選択Trackerへフォーカス", systemImage: "scope")
-          .labelStyle(.iconOnly)
-      }
-      .buttonStyle(ViewportToolButtonStyle(isSelected: false))
-      .disabled(!canFrameSelected)
-      .help("選択Trackerを回転中心にする")
 
       Button(action: onFrameAll) {
         Label("作業空間を全表示", systemImage: "square.resize")
