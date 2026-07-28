@@ -135,6 +135,16 @@ generated codeは手編集しません。schema compiler versionを固定し、�
 - MCAP metadata
 - interpolation
 
+### 実時間runtime
+
+実時間で動くruntime（Simulator、UDP受信）のtestでは、反映を固定sleepで待ちません。CI
+runnerの負荷でschedulerが遅れると、次のframeが届く前にassertionへ進み、testが不定期に
+失敗します。Swift側は`waitUntil(_:timeout:pollInterval:condition:)`を使い、待ち時間では
+なく条件で待ちます。
+
+「一定時間が経っても値が変わらない」ことを確かめる否定的な検証だけは、意図した経過時間を
+コメントで示したうえでsleepします。
+
 ### Protocol conformance
 
 同じgolden packetをC++、Swift、C#、TypeScriptで読みます。各実装が生成したpacketも他言語で読めることを確認します。

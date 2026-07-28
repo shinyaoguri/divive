@@ -176,7 +176,11 @@ final class HubAppConfigurationTests: XCTestCase {
         motion: .circle
       )
     )
-    try await Task.sleep(for: .milliseconds(100))
+    try await waitUntil("3台のTrackerがHub stateへ到達") {
+      let snapshot = await runtime.snapshot()
+      return snapshot.metrics.attemptedFrames > 0
+        && snapshot.hubState.trackers.count == 3
+    }
 
     let running = await runtime.snapshot()
     XCTAssertTrue(running.metrics.isRunning)
@@ -185,7 +189,8 @@ final class HubAppConfigurationTests: XCTestCase {
 
     await runtime.stop()
     let stopped = await runtime.snapshot()
-    try await Task.sleep(for: .milliseconds(30))
+    // 停止後にframeが増えないことの確認は、120Hzで十数frame分の時間経過が要る。
+    try await Task.sleep(for: .milliseconds(100))
     let stoppedAgain = await runtime.snapshot()
     XCTAssertFalse(stopped.metrics.isRunning)
     XCTAssertFalse(stoppedAgain.metrics.isRunning)
@@ -208,7 +213,9 @@ final class HubAppConfigurationTests: XCTestCase {
         motion: .stationary
       )
     )
-    try await Task.sleep(for: .milliseconds(30))
+    try await waitUntil("TrackerがHub stateへ到達") {
+      await runtime.snapshot().hubState.trackers.isEmpty == false
+    }
     let before = await runtime.snapshot()
     let trackerID = try XCTUnwrap(
       before.hubState.trackers.first?.latest.pose.trackerID
@@ -219,7 +226,10 @@ final class HubAppConfigurationTests: XCTestCase {
       id: trackerID,
       toDisplayedPosition: target
     )
-    try await Task.sleep(for: .milliseconds(30))
+    try await waitUntil("移動後の姿勢がHub stateへ反映") {
+      await runtime.snapshot().hubState.trackers.first?.latest.pose.position
+        == target
+    }
 
     let after = await runtime.snapshot()
     let position = try XCTUnwrap(

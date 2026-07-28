@@ -87,16 +87,9 @@ final class NetworkRuntimeTests: XCTestCase {
     _ count: Int,
     runtime: NetworkRuntime
   ) async throws -> NetworkRuntimeSnapshot {
-    let clock = ContinuousClock()
-    let deadline = clock.now.advanced(by: .seconds(2))
-    while clock.now < deadline {
-      let snapshot = await runtime.snapshot()
-      if snapshot.hubState.trackers.count == count {
-        return snapshot
-      }
-      try await Task.sleep(for: .milliseconds(10))
+    try await waitUntil("\(count)台のTracker受信") {
+      await runtime.snapshot().hubState.trackers.count == count
     }
-    XCTFail("Tracker受信がtimeoutした")
     return await runtime.snapshot()
   }
 
