@@ -261,14 +261,17 @@ Hubから実機Trackerの位置を書き換えません。3Dの画面平面移�
 切り替えても全体の比率を保って確認できます。この正規化は表示専用で、Hubの
 metre値やcalibrationには影響しません。
 
-各Trackerは実機VIVE Tracker (3.0)を単純化した形状で表示します。外寸比は実機の
-70.9 : 79.0 : 44.1mmを保ち、上面視は120度ごとにlobeが張り出す丸い三角形です。
-前方(local `-Z`)はlobe間のくぼみにあたり、残り2つのlobeが前方左右、1つが後方へ
-張り出します。上面はlobeが高くくぼみが低い鞍状で、下端が最も太い断面です。
-各lobeの赤外sensor窪み、前面くぼみの状態LED、後方lobeのUSB端子、底面のマウント
-台座を持たせ、どの向きから見ても前後・上下を判断できます。本体色と前面LEDは
-実効tracking stateの色に追従します。実寸のままではpreview内で見分けられないため、
-表示上は姿勢を読める大きさへ拡大します。
+各Trackerは実機VIVE Trackerの3D modelで表示します。前方左右と後方の3つのlobeが
+張り出す実機の外形をそのまま使い、共通pose規約(+Y上、−Z前方)へ合わせる回転と、
+preview内で姿勢を読める大きさへの等方拡大だけを実行時に適用します。modelは
+Tracker間でcloneして共有するため、16台でも読み込みは一度です。
+
+modelは実機どおり黒一色なので、実効tracking stateの色は足元の円と前面のLEDで
+示します。modelを読み込めない環境では、同じ外形比を持つ手続き的な形状
+(`ViveTrackerShape`)へ自動で切り替え、表示が消えないようにします。
+
+同梱modelの出典とライセンス(CC BY-SA 4.0)は
+[Resources/NOTICE.md](Sources/HubAppUI/Resources/NOTICE.md)にまとめています。
 
 向きの手掛かりとして、青い矢印をlocal `-Z`前方として表示します。選択Trackerには
 赤い`+X`、緑の`+Y`も表示し、右インスペクタにはQuaternionから求めた前方vectorの
