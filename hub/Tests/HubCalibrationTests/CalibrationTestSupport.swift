@@ -1,5 +1,6 @@
 import Foundation
 import HubCalibration
+import HubCore
 import HubProtocol
 import XCTest
 
@@ -94,6 +95,32 @@ func makePoseBatch(
     requestedRateHz: 120,
     backend: .openvr,
     trackers: trackers
+  )
+}
+
+func makeAssembledFrame(
+  bridgeID: UUIDBytes,
+  sessionID: UUIDBytes,
+  trackingSpaceID: UUIDBytes,
+  spaceEpoch: UInt32 = 1,
+  frameSequence: UInt64 = 1,
+  receivedMonotonicNS: UInt64 = 1_000,
+  trackers: [TrackerPose]
+) -> AssembledPoseFrame {
+  AssembledPoseFrame(
+    sessionID: sessionID,
+    bridgeID: bridgeID,
+    frameSequence: frameSequence,
+    expectedBatchCount: 1,
+    receivedBatchIndices: [0],
+    firstReceivedMonotonicNS: receivedMonotonicNS,
+    lastReceivedMonotonicNS: receivedMonotonicNS,
+    completeness: .complete,
+    poseBatch: makePoseBatch(
+      trackingSpaceID: trackingSpaceID,
+      spaceEpoch: spaceEpoch,
+      trackers: trackers
+    )
   )
 }
 

@@ -207,7 +207,8 @@ HubSimulator
 `HubCore`はBridgeごとに未完成frameを最大1つ保持し、frame再構成とlatest stateを
 担当します。latestの生データを変更せず、明示したHub monotonic timeからlivenessと
 実効tracking stateを評価できます。`HubCalibration`はTracker SpaceからStage Spaceへの
-変換とprofileを持ちますが、ingest pipelineへはまだ結線していません。
+変換とprofileを持ち、評価済みsnapshotへ較正を適用できます。GUIへはまだ結線して
+いません。
 
 ### D1. Ingest pipeline
 
@@ -327,10 +328,11 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] 未較正・epoch不一致のgateとproduction / preview mode
 - [x] profile persistence（JSON、atomic、fallback禁止）
 - [x] SDK共通のgolden fixture
+- [x] 評価済みHub snapshotへの較正適用とTracker単位の配信区分
 - [x] origin and forward較正手順の推定器とresidual評価
 - [ ] point-set registrationとresidual error表示UI
 - [ ] optional presentation scaleの分離
-- [ ] ingest pipelineとGUIへの結線
+- [ ] Mac GUIへの較正状態表示と較正操作
 
 ## 作業領域G: 運用
 
