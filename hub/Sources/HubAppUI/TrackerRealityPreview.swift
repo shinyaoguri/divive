@@ -584,6 +584,44 @@ private final class TrackerRealityScene: ObservableObject {
   private var baseStationEntities: [String: BaseStationEntityParts] = [:]
   private var renderedWorkspace: SimulatorWorkspaceDimensions?
 
+  /// 実機VIVE Trackerの外形比率を保った表示用geometry。
+  ///
+  /// 実寸ではpreview内で視認できないため、姿勢を読める大きさへ拡大する。
+  private let trackerShape = ViveTrackerShape(widthMeters: 0.033)
+  /// Tracker間で同じmeshを共有し、16台でもGPU資源を増やさない。
+  private lazy var trackerBodyMesh: MeshResource =
+    trackerShape.bodyMesh().makeResource(name: "vive-tracker-body")
+    ?? .generateBox(
+      size: SIMD3(
+        trackerShape.widthMeters,
+        trackerShape.heightMeters,
+        trackerShape.depthMeters
+      ),
+      cornerRadius: trackerShape.heightMeters * 0.3
+    )
+  private lazy var sensorWellHeight: Float =
+    trackerShape.sensorWellRadius * 0.45
+  private lazy var sensorWellMesh: MeshResource = .generateCylinder(
+    height: sensorWellHeight,
+    radius: trackerShape.sensorWellRadius
+  )
+  private lazy var statusLightMesh: MeshResource = .generateSphere(
+    radius: trackerShape.statusLightRadius
+  )
+  private lazy var mountMesh: MeshResource = .generateCylinder(
+    height: trackerShape.mountHeight,
+    radius: trackerShape.mountRadius
+  )
+  private lazy var connectorMesh: MeshResource = .generateBox(
+    size: trackerShape.connectorSize,
+    cornerRadius: trackerShape.connectorSize.y * 0.3
+  )
+  /// 実機の黒い樹脂に相当する、状態色を邪魔しない外装色。
+  private static let trackerCaseColor = NSColor(
+    calibratedWhite: 0.14,
+    alpha: 1
+  )
+
   init() {
     root.name = "divive-spatial-preview"
     navigationRoot.name = "viewport-navigation"
@@ -923,25 +961,70 @@ private final class TrackerRealityScene: ObservableObject {
     tracker.name = Self.trackerNamePrefix + id
 
     let body = ModelEntity(
-      mesh: .generateBox(
-        size: SIMD3(0.033, 0.013, 0.025),
-        cornerRadius: 0.004
-      ),
-      materials: [
-        SimpleMaterial(color: .systemBlue, isMetallic: false)
-      ]
+      mesh: trackerBodyMesh,
+      materials: [shellMaterial(color: .systemBlue)]
     )
     tracker.addChild(body)
 
+    for anchor in trackerShape.sensorWellAnchors() {
+      let well = ModelEntity(
+        mesh: sensorWellMesh,
+        materials: [
+          SimpleMaterial(color: Self.trackerCaseColor, isMetallic: false)
+        ]
+      )
+      // 円柱の軸は+Yなので、外向き法線へ倒して表面へ沿わせる。
+      // 実機の窪みに見えるよう、本体へ沈めて縁だけを見せる。
+      well.orientation = simd_quatf(from: SIMD3(0, 1, 0), to: anchor.normal)
+      well.position =
+        anchor.position - anchor.normal * (sensorWellHeight * 0.34)
+      tracker.addChild(well)
+    }
+
+    let connectorAnchor = trackerShape.connectorAnchor
+    let connector = ModelEntity(
+      mesh: connectorMesh,
+      materials: [
+        SimpleMaterial(color: Self.trackerCaseColor, isMetallic: false)
+      ]
+    )
+    connector.orientation = simd_quatf(
+      from: SIMD3(0, 0, 1),
+      to: connectorAnchor.normal
+    )
+    connector.position =
+      connectorAnchor.position
+      + connectorAnchor.normal * (trackerShape.connectorSize.z * 0.3)
+    tracker.addChild(connector)
+
+    let mount = ModelEntity(
+      mesh: mountMesh,
+      materials: [
+        SimpleMaterial(color: Self.trackerCaseColor, isMetallic: false)
+      ]
+    )
+    mount.position = SIMD3(0, trackerShape.mountCenterY, 0)
+    tracker.addChild(mount)
+
+    let statusLightAnchor = trackerShape.statusLightAnchor
+    let statusLight = ModelEntity(
+      mesh: statusLightMesh,
+      materials: [UnlitMaterial(color: .systemBlue)]
+    )
+    statusLight.position =
+      statusLightAnchor.position
+      + statusLightAnchor.normal * (trackerShape.statusLightRadius * 0.35)
+    tracker.addChild(statusLight)
+
     let forwardShaft = box(
-      size: SIMD3(0.003, 0.003, 0.036),
+      size: SIMD3(0.0022, 0.0022, 0.036),
       position: SIMD3(0, 0, -0.03),
       material: UnlitMaterial(color: .systemBlue)
     )
     tracker.addChild(forwardShaft)
 
     let forwardHead = ModelEntity(
-      mesh: .generateCone(height: 0.015, radius: 0.008),
+      mesh: .generateCone(height: 0.014, radius: 0.0055),
       materials: [UnlitMaterial(color: .systemBlue)]
     )
     forwardHead.position = SIMD3(0, 0, -0.054)
@@ -967,9 +1050,9 @@ private final class TrackerRealityScene: ObservableObject {
 
     let selection = ModelEntity(
       mesh: .generatePlane(
-        width: 0.05,
-        depth: 0.05,
-        cornerRadius: 0.025
+        width: trackerShape.widthMeters * 1.7,
+        depth: trackerShape.depthMeters * 1.7,
+        cornerRadius: trackerShape.widthMeters * 0.85
       ),
       materials: [
         translucentMaterial(
@@ -978,7 +1061,7 @@ private final class TrackerRealityScene: ObservableObject {
         )
       ]
     )
-    selection.position.y = -0.011
+    selection.position.y = trackerShape.bottomY - 0.002
     tracker.addChild(selection)
 
     tracker.components.set(InputTargetComponent())
@@ -994,6 +1077,7 @@ private final class TrackerRealityScene: ObservableObject {
     return TrackerEntityParts(
       root: tracker,
       body: body,
+      statusLight: statusLight,
       rightAxis: rightAxis,
       upAxis: upAxis,
       selection: selection
@@ -1020,13 +1104,27 @@ private final class TrackerRealityScene: ObservableObject {
     parts.selection.isEnabled = isSelected
     if parts.renderedTrackingState != tracker.trackingState {
       parts.body.model?.materials = [
-        SimpleMaterial(
-          color: tracker.trackingState.sceneColor,
-          isMetallic: false
-        )
+        shellMaterial(color: tracker.trackingState.sceneColor)
+      ]
+      parts.statusLight.model?.materials = [
+        UnlitMaterial(color: tracker.trackingState.sceneColor)
       ]
       parts.renderedTrackingState = tracker.trackingState
     }
+  }
+
+  /// Tracker本体のcustom mesh用material。
+  ///
+  /// RealityKitが期待する三角形の巻き方向は資料により説明が割れるため、
+  /// 裏面cullingを無効にして、どちらでも実体が欠けないようにする。法線は
+  /// 外向きを与えているため陰影は保たれる。
+  private func shellMaterial(color: NSColor) -> PhysicallyBasedMaterial {
+    var material = PhysicallyBasedMaterial()
+    material.baseColor = .init(tint: color)
+    material.roughness = .init(floatLiteral: 0.55)
+    material.metallic = .init(floatLiteral: 0)
+    material.faceCulling = .none
+    return material
   }
 
   private func box(
@@ -1060,6 +1158,7 @@ private final class TrackerRealityScene: ObservableObject {
 private final class TrackerEntityParts {
   let root: Entity
   let body: ModelEntity
+  let statusLight: ModelEntity
   let rightAxis: ModelEntity
   let upAxis: ModelEntity
   let selection: ModelEntity
@@ -1068,15 +1167,30 @@ private final class TrackerEntityParts {
   init(
     root: Entity,
     body: ModelEntity,
+    statusLight: ModelEntity,
     rightAxis: ModelEntity,
     upAxis: ModelEntity,
     selection: ModelEntity
   ) {
     self.root = root
     self.body = body
+    self.statusLight = statusLight
     self.rightAxis = rightAxis
     self.upAxis = upAxis
     self.selection = selection
+  }
+}
+
+@available(macOS 15.0, *)
+extension ViveTrackerMesh {
+  /// RealityKitのMeshResourceへ変換する。生成に失敗したらnilを返す。
+  @MainActor
+  fileprivate func makeResource(name: String) -> MeshResource? {
+    var descriptor = MeshDescriptor(name: name)
+    descriptor.positions = MeshBuffers.Positions(positions)
+    descriptor.normals = MeshBuffers.Normals(normals)
+    descriptor.primitives = .triangles(indices)
+    return try? MeshResource.generate(from: [descriptor])
   }
 }
 
