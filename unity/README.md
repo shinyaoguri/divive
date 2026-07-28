@@ -26,6 +26,11 @@ swift run --package-path hub divive-simulator --trackers 3 --motion circle --pub
 サンプルはsceneをassetとして持たず、Play時に`DiviveSampleBootstrap`が床・カメラ・
 接続componentを組み立てます。空のsceneのままPlayしても動きます。
 
+サンプルはBuilt-in Render Pipelineを前提にしています。`GameObject.CreatePrimitive`が
+付ける既定materialをそのまま使うため、URPやHDRPを入れると表示がmagentaになります。
+`Packages/manifest.json`へrender pipeline packageを足す場合は、materialも
+そのpipeline用に差し替えてください。
+
 ## パッケージを自分のプロジェクトで使う
 
 `Packages/manifest.json`へ相対パスで追加します。
