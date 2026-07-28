@@ -1,0 +1,16 @@
+{
+  "name": "com.divive.tracking",
+  "version": "0.1.0",
+  "displayName": "divive Tracking",
+  "description": "divive Hubが配信するStage Spaceの6DoF姿勢をUnityで受け取るSDKです。SteamVRやVIVE固有の処理を含まず、localhost UDPでHubへ接続します。",
+  "unity": "2022.3",
+  "keywords": [
+    "tracking",
+    "vive",
+    "motion capture",
+    "6dof"
+  ],
+  "author": {
+    "name": "divive"
+  }
+}
