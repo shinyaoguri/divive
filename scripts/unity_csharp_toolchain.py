@@ -18,7 +18,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "unity" / "com.divive.tracking"
-DEFAULT_EDITOR = Path("/Applications/Unity/Hub/Editor/6000.4.7f1/Unity.app/Contents")
+EDITOR_ROOT = Path("/Applications/Unity/Hub/Editor")
+
+
+def discover_editor() -> Path:
+    """Unity Hubが入れたEditorのうち、最も新しいものを返す。
+
+    versionをscriptへ固定すると、Editorを入れ替えるたびに検証が動かなくなる。
+    見つからない場合も落とさず、--editorで明示するようrequire_toolchainが案内する。
+    """
+    candidates = sorted(EDITOR_ROOT.glob("*/Unity.app/Contents"))
+    if not candidates:
+        return EDITOR_ROOT / "Unity.app" / "Contents"
+    return candidates[-1]
+
+
+DEFAULT_EDITOR = discover_editor()
 
 RUNTIME_CONFIG = """{
   "runtimeOptions": {
@@ -33,12 +48,35 @@ RUNTIME_CONFIG = """{
 """
 
 
+def force_utf8_output() -> None:
+    """標準出力をUTF-8にする。
+
+    Windowsの既定はcp1252で、日本語のログを書くだけでUnicodeEncodeErrorになる。
+    検査結果ではなくメッセージの出力で失敗するのを防ぐ。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def dotnet_path(editor: Path) -> Path:
     return editor / "Resources" / "Scripting" / "NetCoreRuntime" / "dotnet"
 
 
 def csc_path(editor: Path) -> Path:
-    return editor / "Resources" / "Scripting" / "DotNetSdkRoslyn" / "csc.dll"
+    """Roslynのcsc.dllを探す。
+
+    Unity 6000.4は`DotNetSdkRoslyn/csc.dll`、6000.5は`DotNetSdk/sdk/*/Roslyn`配下と、
+    versionで置き場が変わる。決め打ちにせず、見つかったものを使う。
+    """
+    scripting = editor / "Resources" / "Scripting"
+    direct = scripting / "DotNetSdkRoslyn" / "csc.dll"
+    if direct.is_file():
+        return direct
+
+    candidates = sorted(scripting.glob("DotNetSdk/sdk/*/Roslyn/bincore/csc.dll"))
+    return candidates[-1] if candidates else direct
 
 
 def require_toolchain(editor: Path) -> None:
@@ -70,16 +108,16 @@ def unity_managed_directory(editor: Path) -> Path:
 
 
 def nunit_path(editor: Path) -> Path:
-    return (
+    """同梱nunitを探す。target frameworkのdirectory名がversionで変わる。"""
+    package = (
         editor
         / "Resources"
         / "PackageManager"
         / "BuiltInPackages"
         / "com.unity.ext.nunit"
-        / "net40"
-        / "unity-custom"
-        / "nunit.framework.dll"
     )
+    candidates = sorted(package.glob("*/unity-custom/nunit.framework.dll"))
+    return candidates[-1] if candidates else package / "nunit.framework.dll"
 
 
 def reference_assemblies(editor: Path, include_nunit: bool) -> list[Path]:
@@ -93,6 +131,10 @@ def reference_assemblies(editor: Path, include_nunit: bool) -> list[Path]:
     # IMGUIやPhysicsなど、sampleが触れるmoduleもまとめて参照する。
     references.append(unity_managed / "UnityEngine.dll")
     references.extend(sorted(unity_managed.glob("UnityEngine.*.dll")))
+    # Unity 6000.5以降、RuntimeInitializeOnLoadMethodがPreserveAttributeを参照する。
+    scripting = unity_managed / "Unity.Scripting.dll"
+    if scripting.is_file():
+        references.append(scripting)
 
     if include_nunit:
         nunit = nunit_path(editor)
@@ -108,7 +150,11 @@ def stage_runtime_dependencies(editor: Path, workspace: Path, include_nunit: boo
     UnityEngine.CoreModuleはattributeの解決で他のmoduleを参照するため、
     直接参照した2つだけでは足りない。UnityEngine配下をまとめて配置する。
     """
-    dependencies = sorted(unity_managed_directory(editor).glob("UnityEngine.*.dll"))
+    unity_managed = unity_managed_directory(editor)
+    dependencies = sorted(unity_managed.glob("UnityEngine.*.dll"))
+    scripting = unity_managed / "Unity.Scripting.dll"
+    if scripting.is_file():
+        dependencies.append(scripting)
     if include_nunit:
         dependencies.append(nunit_path(editor))
 
@@ -131,9 +177,15 @@ def package_test_sources() -> list[Path]:
 
 
 def sample_sources() -> list[Path]:
-    """sampleのscript。実行はしないが、compileできることは確認する。"""
+    """sampleのscript。実行はしないが、compileできることは確認する。
+
+    sampleのTestsはUnity Test FrameworkとPlay modeを要求するため対象外にする。
+    こちらはEditorのTest Runnerで実行する。
+    """
     sample = ROOT / "unity" / "DiviveSample" / "Assets"
-    return sorted(sample.rglob("*.cs"))
+    return sorted(
+        path for path in sample.rglob("*.cs") if "Tests" not in path.parts
+    )
 
 
 def compile_assembly(

@@ -51,7 +51,15 @@ def main() -> int:
 
     print("build: divive-simulatorをbuildします")
     build = subprocess.run(
-        ["swift", "build", "--package-path", str(ROOT / "hub"), "--product", "divive-simulator"],
+        [
+            "swift",
+            "build",
+            "--package-path",
+            str(ROOT / "hub"),
+            "--product",
+            "divive-simulator",
+            "--show-bin-path",
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -60,6 +68,13 @@ def main() -> int:
         sys.stdout.write(build.stdout)
         sys.stderr.write(build.stderr)
         return build.returncode
+
+    # `swift run`はbinaryを子processとして起動するため、terminateしても孫が残り、
+    # portを掴んだままになる。binaryを直接起動して確実に止められるようにする。
+    simulator_binary = Path(build.stdout.strip().splitlines()[-1]) / "divive-simulator"
+    if not simulator_binary.is_file():
+        sys.stderr.write(f"divive-simulatorが見つかりません: {simulator_binary}\n")
+        return 1
 
     with tempfile.TemporaryDirectory() as directory:
         workspace = Path(directory)
@@ -73,11 +88,7 @@ def main() -> int:
         print(f"run: divive-simulator --publish --publish-port {port}")
         simulator = subprocess.Popen(
             [
-                "swift",
-                "run",
-                "--package-path",
-                str(ROOT / "hub"),
-                "divive-simulator",
+                str(simulator_binary),
                 "--trackers",
                 str(arguments.trackers),
                 "--rate",
