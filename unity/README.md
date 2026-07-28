@@ -137,30 +137,37 @@ trueです。追跡喪失中もHubは最後の姿勢を配信し続けるので�
 
 ## テスト
 
-Unity Editorを開ける場合は、`unity/DiviveSample`でTest Runner（EditMode）を実行します。
+Unity EditorのTest Runnerで、packageのunit testとsampleの実結合を実行します。
+`divive-simulator --publish`の起動まで含めて1コマンドで走ります。
 
-Editorのlicenseがない環境では、Unity同梱のRoslynと.NET runtimeで同じsourceを
-compileして実行できます。
+```bash
+python3 scripts/run_unity_editor_tests.py
+```
+
+- EditMode: 座標変換とgolden packetのdecode
+- PlayMode: sampleがHubへ接続し、TrackerのGameObjectを作り、Transformへ姿勢を
+  反映して動かすところまで
+
+PlayMode testは`DIVIVE_E2E=1`のときだけ走ります。Hubが配信していない状態で実行すると
+「Hubへ接続できませんでした」で失敗します。skipを成功として扱わないよう、
+skipやinconclusiveが残った場合もscriptは失敗を返します。
+
+Editor licenseがない環境では、Unity同梱のRoslynと.NET runtimeでSDKのcoreだけを
+検証できます。
 
 ```bash
 python3 scripts/run_unity_package_tests.py
-```
-
-Hubの実配信をSDKで受信できることは、次で確認します。`divive-simulator`を
-起動してUDP越しに受信し、frame数、decode error、位置の変化を検査します。
-
-```bash
 python3 scripts/check_stage_end_to_end.py
 ```
 
-どちらもMonoBehaviourの挙動やEditor統合までは検証しません。componentを含む確認は
-Unity Editorでsampleを動かしてください。
+前者はEditModeと同じtestを実行し、後者は`divive-simulator --publish`から
+UDP越しに受信してframe数、decode error、位置の変化を検査します。どちらも
+MonoBehaviourの挙動とEditor統合までは検証しません。
 
 ## 制約
 
-- 検証したUnityは`6000.4.7f1`です。`package.json`の最小versionは`2022.3`ですが、
+- 検証したUnityは`6000.5.5f1`です。`package.json`の最小versionは`2022.3`ですが、
   それより古い環境での動作は確認していません
-- `.meta`はcommitしていません。Editorで最初に開いたときに生成されます
 - 認証はありません。LANへ広げる場合はHub側にHMACとtokenが入るまで待ってください
 - 実機Bridgeとの結合はまだ検証していません。Windows実機が来た時点で確認します
 

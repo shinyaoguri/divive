@@ -1,0 +1,16 @@
+{
+  "name": "Divive.Sample",
+  "rootNamespace": "Divive.Sample",
+  "references": [
+    "Divive.Tracking"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
