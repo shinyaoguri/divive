@@ -147,8 +147,16 @@ Hubからcontentへの配信経路を「stage plane」として確定しまし�
 - 受信threadとmain threadを3つのsnapshotで受け渡し、定常状態のallocationを0にする
 - canonical → Unity座標の変換。角速度は軸性vectorとして別式で変換する
 
-Unity Editorのbatchmodeはlicenseを要求するため、CIでは使っていません。SDKのcoreは
-Unity同梱のRoslynと.NET runtimeで検証します。
+検証はUnity 6000.5.5f1のEditorで実施済みです。EditModeでpackageのunit test 11件、
+PlayModeでsampleがHubへ接続してTrackerを表示するところまで通っています。
+
+```bash
+python3 scripts/run_unity_editor_tests.py
+```
+
+CIへは入れていません。GitHubのrunnerにUnityがなく、jobを置いても常にskipされる
+ためです。Editor licenseがない環境向けに、Unity同梱のRoslynと.NET runtimeで
+SDKのcoreだけを検証する経路も残しています。
 
 ```bash
 python3 scripts/run_unity_package_tests.py
@@ -271,7 +279,6 @@ Ultimate TrackerのH2、3〜5台同時試験、Windows BridgeからMacへの有�
 - role mappingの永続化
 - Mac GUIからのstage plane配信の開始・停止と状態表示（現状はCLIのみ）
 - Unity SDKのmDNS discoveryと、clock mappingに基づく補間
-- Unity Editorでのsample動作確認（Editor licenseが必要）
 - MCAP Recorder / Playback
 - JSON WebSocket、p5.js client
 - Unreal Engine Plugin
@@ -339,10 +346,9 @@ Unity SDKまで通ったので、次の候補は3つです。
 
 1. Mac GUIからstage plane配信を操作できるようにする。現状はCLIからしか配信できず、
    GUIでSimulatorを動かしながらUnityへ配信できない
-2. Unity Editorでsampleを実際に動かして、componentとEditor統合を確認する。
-   Editor licenseの認証が必要
-3. 同じstage schemaでp5.jsまたはUnrealへ展開する。Unityで使い勝手を確定してから
+2. 同じstage schemaでp5.jsまたはUnrealへ展開する。Unityで使い勝手を確定してから
    広げる順序は変えない
+3. Unity SDKのmDNS discoveryを入れて、portの手入力をなくす
 
 Recorderを先に進める場合も、記録対象はTracker Spaceのままにします。stage planeは
 較正結果に依存するため、記録の正本にしません。
@@ -403,12 +409,13 @@ cmake --build --preset macos-debug \
 swift test --package-path hub
 swift run --package-path hub divive-hub-app
 
+python3 scripts/run_unity_editor_tests.py
 python3 scripts/run_unity_package_tests.py
 python3 scripts/check_stage_end_to_end.py
 ```
 
 stage plane追加時点のHub testは203件です。test数だけでなく失敗0件を確認して
-ください。Unity Package testは11件です。
+ください。Unity Package testはEditMode 11件、PlayMode 1件です。
 
 `check_stage_end_to_end.py`は`divive-simulator --publish`を起動し、Unity SDKと同じ
 C#実装でUDP受信します。Unity Editorのlicenseがなくても、SwiftのencoderとC#の

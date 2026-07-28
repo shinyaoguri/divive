@@ -182,7 +182,7 @@ runnerの負荷でschedulerが遅れると、次のframeが届く前にassertion
 | protocol | Linux/macOS/Windows | schema generation、golden vectors |
 | bridge-unit | Windows + macOS | common code、Windows artifact |
 | hub-unit | macOS | Swift packages |
-| unity | Unity同梱Roslyn（現状はlocal実行） | package tests |
+| unity | Unity Editor（現状はlocal実行） | package tests、sampleの実結合 |
 | web | Linux | TypeScript tests |
 | unreal | Windows | plugin compile、後期導入 |
 | hardware | self-hosted Windows | opt-in/manual |
@@ -195,14 +195,24 @@ GitHubのrunnerにはUnityが入っていないため、jobを置いても常に
 実行します。
 
 ```bash
+python3 scripts/run_unity_editor_tests.py
+```
+
+EditModeでpackageのunit testを、PlayModeでsampleがHubへ接続してTrackerを表示する
+ところまでを実行します。PlayModeは`divive-simulator --publish`の起動を含みます。
+skipやinconclusiveが残った場合も失敗として返し、実行されなかったtestを成功として
+扱いません。
+
+Editor licenseがない環境では、Unity同梱のRoslynと.NET runtimeでSDKのcoreだけを
+検証できます。
+
+```bash
 python3 scripts/run_unity_package_tests.py
 python3 scripts/check_stage_end_to_end.py
 ```
 
-前者はUnity同梱のRoslynと.NET runtimeでSDKのcoreをbuild・実行します。後者は
-`divive-simulator --publish`を起動し、SDKと同じC#実装でUDP受信できることを確認
-します。schemaとcommit済みbindingの乖離、golden vectorとUnity Package側の写しの
-乖離は、protocol jobとhub jobがCIで検出します。
+schemaとcommit済みbindingの乖離、golden vectorとUnity Package側の写しの乖離は、
+protocol jobとhub jobがCIで検出します。
 
 ## Branchとreview
 
