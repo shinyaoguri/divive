@@ -106,18 +106,29 @@ non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対�
 
 ## 複数Bridgeのキャリブレーション
 
-各Bridgeのtracking spaceごとにprofile entryを持ちます。
+各Bridgeのtracking spaceごとにprofile entryを持ちます。keyは`tracking_space_id`の
+canonical UUID文字列です。
 
 ```json
 {
+  "formatVersion": 1,
   "profileId": "studio-a",
+  "name": "Studio A",
   "revision": 4,
+  "createdAt": "2026-07-28T00:00:00Z",
+  "updatedAt": "2026-07-28T00:12:00Z",
+  "applicationVersion": "0.1.0",
   "spaces": {
-    "space-a": {
-      "epoch": 2,
+    "00010203-0405-0607-0809-0a0b0c0d0e0f": {
+      "spaceEpoch": 2,
       "translation": [0.0, 0.0, 0.0],
       "rotation": [0.0, 0.0, 0.0, 1.0],
-      "rmsErrorM": 0.003
+      "method": "origin_and_forward",
+      "sampleCount": 12,
+      "rmsErrorM": 0.003,
+      "maxResidualM": 0.006,
+      "operatorNote": "床面基準",
+      "updatedAt": "2026-07-28T00:12:00Z"
     }
   }
 }
@@ -127,6 +138,7 @@ non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対�
 
 ## Profile metadata
 
+- format version
 - profile ID
 - human-readable name
 - revision
@@ -141,6 +153,27 @@ non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対�
 - application version
 
 role mappingはcalibration profileから分離します。同じ空間較正を使いながら、Trackerの役割だけ変更できるためです。
+
+## Hubの実装状況
+
+Swift側の`HubCalibration`が、rigid transform、profile、gate、永続化、golden testを
+提供します。
+
+| 型 | 責務 |
+| --- | --- |
+| `RigidTransform` | SE(3)変換、合成、逆変換、正規化検査 |
+| `CalibrationProfile` | format version、revision、space単位の較正metadata |
+| `CalibrationResolver` | `tracking_space_id`と`space_epoch`の引き当てとStage変換 |
+| `CalibrationStore` | JSONへのatomic保存と読み込み |
+
+`CalibrationResolver`は較正済みspaceを`stage`、未較正を`uncalibrated`、epoch不一致を
+`epochMismatch`として返します。production modeでは後2者を配信せず、preview modeでは
+生Tracker Spaceであることを明示したうえで変換せずに通します。
+
+較正手順（origin and forward、point-set registration）の推定器、Content Profile
+Spaceのpresentation scale、role mappingの永続化、Hub pipelineへの結線はまだ
+実装していません。
+
 
 ## Engine座標への変換
 
@@ -160,16 +193,22 @@ SDKはcanonical 3D値をそのまま提供します。canvas、WebGL camera、�
 
 ## 適合性テスト
 
-全SDKで次のgolden casesを共有します。
+全SDKで次のgolden casesを共有します。fixtureは
+[calibration/golden/transform_v1.cases.json](../calibration/golden/transform_v1.cases.json)
+に置き、追加手順は[Calibration golden fixture](../calibration/README.md)を参照します。
 
-- identity
-- +X / +Y / -Z translation
-- X/Y/Z軸の90度回転
-- rotation + translation
-- angular velocity
-- profile scale
-- two-Bridge composition
-- quaternion sign equivalence
+| case | fixtureの名前 |
+| --- | --- |
+| identity | `identity` |
+| +X / +Y / -Z translation | `translation_only` |
+| X/Y/Z軸の90度回転 | `pitch_90_about_right` / `yaw_90_about_up` / `roll_90_about_forward_axis` |
+| rotation + translation | `yaw_90_then_translation` |
+| angular velocity | `velocity_ignores_large_translation` |
+| two-Bridge composition | `two_space_composition` |
+| quaternion sign equivalence | `quaternion_sign_equivalence` |
+
+profile scaleはContent Profile Spaceの責務のため、rigid transformのfixtureへ含めず、
+presentation scaleを実装する段階で別caseとして追加します。
 
 quaternion `q`と`-q`は同じrotationなので、成分の単純一致ではなく回転として比較します。
 

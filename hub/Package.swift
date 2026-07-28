@@ -11,6 +11,7 @@ let package = Package(
     .library(name: "HubProtocol", targets: ["HubProtocol"]),
     .library(name: "HubNetworking", targets: ["HubNetworking"]),
     .library(name: "HubCore", targets: ["HubCore"]),
+    .library(name: "HubCalibration", targets: ["HubCalibration"]),
     .library(name: "HubSimulator", targets: ["HubSimulator"]),
     .library(name: "HubAppUI", targets: ["HubAppUI"]),
     .executable(name: "divive-receiver", targets: ["DiviveReceiver"]),
@@ -44,6 +45,10 @@ let package = Package(
     ),
     .target(
       name: "HubCore",
+      dependencies: ["HubProtocol"]
+    ),
+    .target(
+      name: "HubCalibration",
       dependencies: ["HubProtocol"]
     ),
     .target(
@@ -88,6 +93,10 @@ let package = Package(
     .testTarget(
       name: "HubCoreTests",
       dependencies: ["HubCore", "HubProtocol"]
+    ),
+    .testTarget(
+      name: "HubCalibrationTests",
+      dependencies: ["HubCalibration", "HubProtocol"]
     ),
     .testTarget(
       name: "HubSimulatorTests",
