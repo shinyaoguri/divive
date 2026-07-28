@@ -95,6 +95,17 @@ non-uniform scaleはrotationや速度の意味を壊すため、MVPでは非対�
 
 床面を使う場合は高さoffsetを別途入力できます。
 
+`OriginAndForwardEstimator`が実装済みです。up軸は`+Y`に固定し、前方サンプルの
+高さ差をyawへ持ち込みません。前方方向の水平距離が0.1m未満の場合は、わずかなjitterで
+yawが大きく振れるため`degenerateForwardDirection`を返して較正を拒否します。
+
+静止Trackerの複数frameは`CalibrationSample.fromStationaryFrames`で成分ごとの
+中央値へまとめます。遮蔽復帰やjitterで1 frameだけ大きく外れることがあり、平均では
+原点がその1点に引きずられるためです。
+
+known pointは`CalibrationCheckPoint`として与え、RMSとmax residualを
+`SpaceCalibration`のmetadataへ記録します。
+
 ### Later: point-set registration
 
 3点以上の対応点からrigid transformを推定します。
@@ -165,14 +176,14 @@ Swift側の`HubCalibration`が、rigid transform、profile、gate、永続化、
 | `CalibrationProfile` | format version、revision、space単位の較正metadata |
 | `CalibrationResolver` | `tracking_space_id`と`space_epoch`の引き当てとStage変換 |
 | `CalibrationStore` | JSONへのatomic保存と読み込み |
+| `OriginAndForwardEstimator` | origin and forward手順の推定、退化検出、residual評価 |
 
 `CalibrationResolver`は較正済みspaceを`stage`、未較正を`uncalibrated`、epoch不一致を
 `epochMismatch`として返します。production modeでは後2者を配信せず、preview modeでは
 生Tracker Spaceであることを明示したうえで変換せずに通します。
 
-較正手順（origin and forward、point-set registration）の推定器、Content Profile
-Spaceのpresentation scale、role mappingの永続化、Hub pipelineへの結線はまだ
-実装していません。
+point-set registration、Content Profile Spaceのpresentation scale、role mappingの
+永続化、Hub pipelineとGUIへの結線はまだ実装していません。
 
 
 ## Engine座標への変換

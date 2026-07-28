@@ -121,8 +121,8 @@ ageに基づくlost / disconnected評価、CLI診断まで実装済みです。W
 
 [Calibration core](calibration/README.md)は、Tracker SpaceからStage Spaceへの剛体
 変換、`tracking_space_id`ごとのprofile、未較正・epoch不一致のgate、profileの永続化、
-SDK共通のgolden fixtureまで実装済みです。Hubのingest pipelineとGUIへの結線、
-較正手順の推定器はまだ含みません。
+SDK共通のgolden fixture、origin and forward手順の推定まで実装済みです。Hubのingest
+pipelineとGUIへの結線、point-set registrationはまだ含みません。
 
 [Headless Simulator](hub/SIMULATOR.md)は、VIVE実機やWindowsがない状態で、
 決定論的なvirtual Tracker姿勢と再現可能なframe loss / tracking lostを同じ

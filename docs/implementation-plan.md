@@ -327,8 +327,8 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] 未較正・epoch不一致のgateとproduction / preview mode
 - [x] profile persistence（JSON、atomic、fallback禁止）
 - [x] SDK共通のgolden fixture
-- [ ] origin and forward較正手順の推定器
-- [ ] point-set registrationとresidual error表示
+- [x] origin and forward較正手順の推定器とresidual評価
+- [ ] point-set registrationとresidual error表示UI
 - [ ] optional presentation scaleの分離
 - [ ] ingest pipelineとGUIへの結線
 
