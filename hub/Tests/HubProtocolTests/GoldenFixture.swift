@@ -1,19 +1,31 @@
 import Foundation
 
 enum GoldenFixture {
-  static func packet() throws -> [UInt8] {
-    let testDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let repositoryRoot =
-      testDirectory
+  static var repositoryRoot: URL {
+    URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-    let fixtureURL =
-      repositoryRoot
-      .appendingPathComponent("protocol/golden/pose_v1.packet.hex")
-    let hex = try String(contentsOf: fixtureURL, encoding: .utf8)
-      .filter { !$0.isWhitespace }
+      .deletingLastPathComponent()
+  }
 
+  static func packet() throws -> [UInt8] {
+    try packet(atRepositoryPath: "protocol/golden/pose_v1.packet.hex")
+  }
+
+  static func packet(atRepositoryPath path: String) throws -> [UInt8] {
+    try decodeHex(try hexText(atRepositoryPath: path))
+  }
+
+  static func hexText(atRepositoryPath path: String) throws -> String {
+    try String(
+      contentsOf: repositoryRoot.appendingPathComponent(path),
+      encoding: .utf8
+    )
+  }
+
+  static func decodeHex(_ text: String) throws -> [UInt8] {
+    let hex = text.filter { !$0.isWhitespace }
     guard hex.count.isMultiple(of: 2) else {
       throw GoldenFixtureError.oddHexLength
     }

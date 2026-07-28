@@ -9,6 +9,7 @@ ADRは「何を選んだか」だけでなく、「なぜ選び、何を捨て�
 | [0003](0003-flatbuffers-over-udp.md) | 実時間姿勢のFlatBuffers over UDP配信 | Accepted |
 | [0004](0004-multi-bridge-architecture.md) | 複数Bridgeアーキテクチャ | Accepted |
 | [0005](0005-mcap-recording.md) | 正規化frameのMCAP記録 | Accepted |
+| [0006](0006-stage-plane-content-transport.md) | Hubからcontentへのstage plane配信 | Accepted |
 
 新しいADRは[template](0000-template.md)をコピーして作成します。
 

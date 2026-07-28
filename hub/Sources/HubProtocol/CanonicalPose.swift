@@ -28,6 +28,22 @@ public struct UUIDBytes: Hashable, Sendable, CustomStringConvertible {
     bytes.allSatisfy { $0 == 0 }
   }
 
+  /// FlatBuffers schemaが定めるbig-endian 32-bit word 4個の表現。
+  var words: (UInt32, UInt32, UInt32, UInt32) {
+    (
+      Self.word(of: bytes, at: 0),
+      Self.word(of: bytes, at: 4),
+      Self.word(of: bytes, at: 8),
+      Self.word(of: bytes, at: 12)
+    )
+  }
+
+  private static func word(of bytes: [UInt8], at offset: Int) -> UInt32 {
+    bytes[offset..<(offset + 4)].reduce(UInt32(0)) { value, byte in
+      (value << 8) | UInt32(byte)
+    }
+  }
+
   public var description: String {
     let hex = bytes.map { String(format: "%02x", $0) }
     return [

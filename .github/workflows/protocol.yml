@@ -6,6 +6,8 @@ on:
       - "CMakeLists.txt"
       - "protocol/**"
       - "hub/Sources/HubProtocol/Generated/**"
+      - "unity/com.divive.tracking/Runtime/Generated/**"
+      - "scripts/check_generated_bindings.py"
       - ".github/workflows/protocol.yml"
   push:
     branches:
@@ -14,6 +16,8 @@ on:
       - "CMakeLists.txt"
       - "protocol/**"
       - "hub/Sources/HubProtocol/Generated/**"
+      - "unity/com.divive.tracking/Runtime/Generated/**"
+      - "scripts/check_generated_bindings.py"
       - ".github/workflows/protocol.yml"
 
 permissions:
@@ -45,6 +49,7 @@ jobs:
           cmake --build build/protocol-ci
           --target divive_protocol_tests divive_protocol_golden_tool
           divive_protocol_swift_codegen_check
+          divive_protocol_csharp_codegen_check
       - name: Conformance test
         run: >
           ctest --test-dir build/protocol-ci

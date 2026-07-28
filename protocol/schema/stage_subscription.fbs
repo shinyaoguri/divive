@@ -1,0 +1,21 @@
+// contentからHubへ送る購読登録のschema。
+//
+// 単方向UDPの配信先を決めるための最小の登録であり、認証ではない。
+// Hubは既定でloopbackからの購読だけを受け付け、TTLが切れたら配信を止める。
+// stage frameとはfile identifierを分け、envelopeのmessage typeと1対1で対応させる。
+namespace Divive.Stage;
+
+table StageSubscription {
+  /// 診断表示用のclient名。識別子として信頼しない。
+  client_name:string (id: 0);
+  /// contentが希望する配信頻度。0はHub既定値に従う。
+  /// v1のHubは自身の設定rateで配信し、この値は診断表示にだけ使う。
+  requested_rate_hz:ushort = 0 (id: 1);
+  /// この時間だけ購読を維持する。contentはこれより短い間隔で更新を送る。
+  ttl_ms:uint = 0 (id: 2);
+  /// 0以外を指定すると、Hubは購読を解除する。
+  unsubscribe:bool = false (id: 3);
+}
+
+root_type StageSubscription;
+file_identifier "DVSC";
