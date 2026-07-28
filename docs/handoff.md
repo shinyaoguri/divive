@@ -274,27 +274,39 @@ PR #18で3D直接移動と視点操作まで入りましたが、Issue #17は完
 Issue #12のH1だけを先に実行します。H1結果のreviewが終わるまで、Tracker 3.0
 backendを無条件に確定したり、Ultimate対応済みと表現したりしません。
 
-### Macだけで進める場合
+### calibrationは実機で必要になるまで中断する
 
-calibration coreは[Issue #21](https://github.com/shinyaoguri/divive/issues/21)で
-実装済みです。次は較正結果を実際に使う経路を2つに分けて進めます。
+2026-07-28に、calibrationの追加実装をいったん止める判断をしました。core、2つの
+推定器、Stage projection、Mac GUIの較正操作（#21、#23、#27、#29、#31）まで入って
+います。
 
-1. Unity SDKのlocal API contractをIssueまたはADRで定義する。Stage Spaceの
-   public contractは較正まで含めて固まった
-2. GUIからのpoint-set registration対応点取得と外れ値の採否提示を定義する
+止める理由は、較正が本来は実機のための機能だからです。Simulatorが生成する
+Tracker Spaceは最初からStageと一致し、実空間の設置誤差も床の傾きもありません。
+Simulatorを較正する運用上の意味はなく、GUIの較正操作もWindows実機なしで経路を
+確認するためのテストベッドとして作ったものです。
 
-どちらもUnity SDKやRecorderより先に固定します。content向けlocal transportを
-決める前に、Stage Spaceのpublic contractを確定させるためです。
+したがって残りのcalibration作業は、実際に使う段階が来るまで着手しません。
+
+- GUIからのpoint-set registration対応点取得
+- 外れ値の採否提示UI
+- Content Profile Spaceのpresentation scale
+
+`CalibrationPanel`はSourceに依存せず`model.trackers`の現在位置を読むだけなので、
+UDP受信中の実機Trackerでも同じ手順で較正できます。ただしUDP経路での較正はまだ
+testしておらず、実機Bridgeが来たときに実地で確認する必要があります。
 
 物理calibrationのscaleは1.0を維持し、演出用presentation scaleと分離します。
 複数Bridgeのspaceをcalibrationなしに混合してはいけません。詳細は
 [Calibration](calibration.md)と[ADR 0004](adr/0004-multi-bridge-architecture.md)を
 参照してください。
 
-calibrationの次に、UnityでAPIを確定し、その後にRecorder、p5.js、Unrealへ
-展開するのが現在の依存関係に合います。content向けlocal transportはまだ固定して
-いないため、Unity実装前にlatest pose、event、補間、thread dispatch、座標変換の
-public contractをIssueまたはADRで明確にしてください。
+### Macだけで進める場合
+
+Stage Spaceのpublic contractは較正まで含めて固まったため、次はUnity SDKの
+local API contractをIssueまたはADRで定義するのが依存関係に合います。content向け
+local transportはまだ固定していないため、Unity実装前にlatest pose、event、補間、
+thread dispatch、座標変換のpublic contractを明確にしてください。Unityで使い勝手を
+確定してから、Recorder、p5.js、Unrealへ展開します。
 
 Simulatorを優先する場合は、Issue #17の残りを一度に実装せず、3軸gizmoと
 キーボード/数値入力を別の検証可能なIssueへ分割します。
