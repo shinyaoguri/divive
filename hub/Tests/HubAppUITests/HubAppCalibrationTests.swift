@@ -7,27 +7,25 @@ import XCTest
 
 @MainActor
 final class HubAppCalibrationTests: XCTestCase {
-  private var directory = URL(fileURLWithPath: NSTemporaryDirectory())
   private let fixedDate = Date(timeIntervalSince1970: 1_800_000_000)
 
-  override func setUpWithError() throws {
-    directory = URL(fileURLWithPath: NSTemporaryDirectory())
+  /// testごとに独立した保存先を作る。
+  ///
+  /// `setUpWithError`はnonisolatedのため、MainActor隔離のstateをそこへ置かない。
+  private func makeStoreURL() throws -> URL {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("divive-gui-calibration-\(UUID().uuidString)")
     try FileManager.default.createDirectory(
       at: directory,
       withIntermediateDirectories: true
     )
+    addTeardownBlock {
+      try? FileManager.default.removeItem(at: directory)
+    }
+    return directory.appendingPathComponent("calibration.json")
   }
 
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: directory)
-  }
-
-  private var storeURL: URL {
-    directory.appendingPathComponent("calibration.json")
-  }
-
-  private func makeModel() -> HubAppModel {
+  private func makeModel(storeURL: URL) -> HubAppModel {
     HubAppModel(
       calibrationStore: CalibrationStore(url: storeURL),
       now: fixedDate
@@ -66,7 +64,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test較正前は未較正としてpreview配信される() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -80,7 +79,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func testProductionでは未較正Trackerが非配信になる() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -97,7 +97,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test原点と前方から較正してStage位置を得る() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -137,7 +138,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test床面offsetで原点の高さを指定できる() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -162,7 +164,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test較正結果がファイルへ保存され再読込で復元される() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
 
     let trackerID = try XCTUnwrap(model.trackers.first?.id)
@@ -176,7 +179,7 @@ final class HubAppCalibrationTests: XCTestCase {
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path))
 
-    let restored = makeModel()
+    let restored = makeModel(storeURL: storeURL)
     XCTAssertNil(restored.calibrationErrorMessage)
     XCTAssertEqual(restored.calibrationProfileRevision, model.calibrationProfileRevision)
     let calibration = try XCTUnwrap(
@@ -187,7 +190,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test較正を取り消すと未較正へ戻る() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -215,7 +219,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test退化した較正はエラーになりprofileを変更しない() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -235,7 +240,7 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func testTracker未選択のサンプル取得はエラーになる() async throws {
-    let model = makeModel()
+    let model = makeModel(storeURL: try makeStoreURL())
 
     model.captureCalibrationOrigin(trackerID: nil)
 
@@ -247,7 +252,8 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func testサンプルは繰り返し取得すると蓄積される() async throws {
-    let model = makeModel()
+    let storeURL = try makeStoreURL()
+    let model = makeModel(storeURL: storeURL)
     try await startSimulator(model)
     defer { Task { await model.stopActiveSource() } }
 
@@ -266,9 +272,10 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test壊れたprofileはidentityへfallbackせずエラーを出す() async throws {
+    let storeURL = try makeStoreURL()
     try Data("{ broken".utf8).write(to: storeURL)
 
-    let model = makeModel()
+    let model = makeModel(storeURL: storeURL)
 
     let message = try XCTUnwrap(model.calibrationErrorMessage)
     XCTAssertTrue(message.contains("calibration profileを読み込めませんでした"), message)
@@ -285,6 +292,7 @@ final class HubAppCalibrationTests: XCTestCase {
   }
 
   func test保存済みprofileが起動時に読み込まれる() async throws {
+    let storeURL = try makeStoreURL()
     let spaceID = try UUIDBytes(bytes: (0..<16).map { UInt8($0) })
     let profile = try CalibrationProfile(
       profileID: "divive-hub",
@@ -305,7 +313,7 @@ final class HubAppCalibrationTests: XCTestCase {
     )
     try CalibrationStore(url: storeURL).save(profile)
 
-    let model = makeModel()
+    let model = makeModel(storeURL: storeURL)
 
     XCTAssertNil(model.calibrationErrorMessage)
     XCTAssertEqual(model.calibrationProfileName, "保存済み")
