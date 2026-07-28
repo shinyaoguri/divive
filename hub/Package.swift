@@ -13,10 +13,12 @@ let package = Package(
     .library(name: "HubCore", targets: ["HubCore"]),
     .library(name: "HubCalibration", targets: ["HubCalibration"]),
     .library(name: "HubSimulator", targets: ["HubSimulator"]),
+    .library(name: "HubDistribution", targets: ["HubDistribution"]),
     .library(name: "HubAppUI", targets: ["HubAppUI"]),
     .executable(name: "divive-receiver", targets: ["DiviveReceiver"]),
     .executable(name: "divive-simulator", targets: ["DiviveSimulator"]),
     .executable(name: "divive-hub-app", targets: ["DiviveHubApp"]),
+    .executable(name: "divive-stage-golden", targets: ["DiviveStageGolden"]),
   ],
   dependencies: [
     .package(
@@ -56,6 +58,16 @@ let package = Package(
       dependencies: ["HubCore", "HubProtocol"]
     ),
     .target(
+      name: "HubDistribution",
+      dependencies: [
+        "HubCalibration",
+        "HubCore",
+        "HubProtocol",
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+      ]
+    ),
+    .target(
       name: "HubAppUI",
       dependencies: [
         "HubCalibration",
@@ -71,11 +83,21 @@ let package = Package(
     ),
     .executableTarget(
       name: "DiviveSimulator",
-      dependencies: ["HubCore", "HubProtocol", "HubSimulator"]
+      dependencies: [
+        "HubCalibration",
+        "HubCore",
+        "HubDistribution",
+        "HubProtocol",
+        "HubSimulator",
+      ]
     ),
     .executableTarget(
       name: "DiviveHubApp",
       dependencies: ["HubAppUI"]
+    ),
+    .executableTarget(
+      name: "DiviveStageGolden",
+      dependencies: ["HubProtocol"]
     ),
     .testTarget(
       name: "HubProtocolTests",
@@ -102,6 +124,18 @@ let package = Package(
     .testTarget(
       name: "HubSimulatorTests",
       dependencies: ["HubCore", "HubProtocol", "HubSimulator"]
+    ),
+    .testTarget(
+      name: "HubDistributionTests",
+      dependencies: [
+        "HubCalibration",
+        "HubCore",
+        "HubDistribution",
+        "HubProtocol",
+        "HubSimulator",
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+      ]
     ),
     .testTarget(
       name: "HubAppUITests",

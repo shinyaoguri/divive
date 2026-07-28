@@ -1,0 +1,84 @@
+// Hubからcontent SDK（Unity、Unreal、独自client）へ配信するstage planeのschema。
+//
+// Bridge → Hubのpose.fbsとは責務が異なる。pose.fbsは取得したままのTracker Spaceを
+// 運ぶが、こちらは較正とliveness評価を済ませたStage Spaceの最新値を運ぶ。
+// canonical semanticsとenumはpose.fbsを唯一の正とし、ここでは再定義しない。
+include "pose.fbs";
+
+namespace Divive.Stage;
+
+/// Hubがcontentへ配信できるかの区分。
+///
+/// `Blocked`のTrackerはposeを含めない。未較正のposeをStage Spaceの値として
+/// contentへ渡さないための区分であり、GUIの表示区分と対応する。
+enum Delivery:ubyte {
+  Unknown = 0,
+  /// 較正済みで、Stage Spaceへ変換した。
+  Stage = 1,
+  /// preview modeで、Tracker Spaceのまま渡す。
+  RawTrackerSpace = 2,
+  /// 未較正またはepoch不一致で、poseを配信しない。
+  Blocked = 3
+}
+
+/// 未較正spaceの扱いを決めるHub側の配信mode。
+enum DeliveryMode:ubyte {
+  Unknown = 0,
+  Production = 1,
+  Preview = 2
+}
+
+/// 受信ageに基づくHubの可用性評価。tracking_stateとは独立に観測する。
+enum Liveness:ubyte {
+  Unknown = 0,
+  Fresh = 1,
+  Stale = 2,
+  Disconnected = 3
+}
+
+/// 較正とliveness評価を適用したあとの、Tracker 1台分の最新値。
+table StageTracker {
+  tracker_id:string (id: 0);
+  /// Hubが正とする論理role。未設定なら空。
+  role:string (id: 1);
+  id_kind:Divive.Protocol.TrackerIdKind = Unknown (id: 2);
+  /// 取得元Bridgeとその追跡空間。複数Bridge時にcontentが出所を判別できる。
+  bridge_id:Divive.Protocol.Uuid (id: 3);
+  tracking_space_id:Divive.Protocol.Uuid (id: 4);
+  space_epoch:uint = 0 (id: 5);
+  delivery:Delivery = Unknown (id: 6);
+  /// `delivery`がBlockedの場合、position以降のpose fieldは存在しない。
+  position:Divive.Protocol.Vec3 (id: 7);
+  orientation:Divive.Protocol.Quaternion (id: 8);
+  linear_velocity:Divive.Protocol.Vec3 (id: 9);
+  angular_velocity:Divive.Protocol.Vec3 (id: 10);
+  tracking_state:Divive.Protocol.TrackingState = Unknown (id: 11);
+  tracking_reason:Divive.Protocol.TrackingReason = Unknown (id: 12);
+  liveness:Liveness = Unknown (id: 13);
+  connected:bool = false (id: 14);
+  battery:Divive.Protocol.BatteryStatus (id: 15);
+  /// Hub monotonic clockで測った、最後に姿勢を受信してからの経過時間。
+  receive_age_ns:ulong = 0 (id: 16);
+  /// 取得元Bridgeのframe sequence。contentの重複検出には使わない。
+  source_frame_sequence:ulong = 0 (id: 17);
+  capture_monotonic_ns:ulong = 0 (id: 18);
+}
+
+/// Hubが1回の配信で送るStage Spaceの最新値。
+///
+/// 過去frameを再送しないため、contentは常にこのtableだけを見ればよい。
+table StageFrame {
+  /// 評価に使ったHubのmonotonic clock。Bridgeのclockとは直接比較しない。
+  hub_monotonic_ns:ulong = 0 (id: 0);
+  /// Hub stateの世代。値が変わらない場合、姿勢は更新されていない。
+  generation:ulong = 0 (id: 1);
+  profile_id:string (id: 2);
+  profile_revision:uint = 0 (id: 3);
+  delivery_mode:DeliveryMode = Unknown (id: 4);
+  /// Hubが配信を試みる頻度。実際の到着間隔の保証ではない。
+  publish_rate_hz:ushort = 0 (id: 5);
+  trackers:[StageTracker] (id: 6);
+}
+
+root_type StageFrame;
+file_identifier "DVST";

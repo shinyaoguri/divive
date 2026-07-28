@@ -28,10 +28,12 @@ Packageは次の責務に分けています。
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
 | `HubCalibration` | rigid transform、profile、space gate、永続化、較正推定、Stage projection |
 | `HubSimulator` | 固定step motion、Tracker編集、seed付き生成・配信障害注入 |
+| `HubDistribution` | content向けstage frameのprojection、TTL付き購読、UDP配信 |
 | `HubAppUI` | UDP / Simulator runtime、source切替、10Hz snapshot、較正操作、SwiftUI画面 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 | `divive-simulator` | Headless Simulatorの実時間CLI |
 | `divive-hub-app` | macOS SwiftUI開発用GUI |
+| `divive-stage-golden` | stage plane golden packetの生成 |
 
 `HubProtocol`はSwiftNIOへ依存しません。今後のSimulatorとPlaybackも、decode後の
 canonical modelから`HubStateStore.apply()`へ接続できます。
@@ -131,21 +133,45 @@ swift run divive-receiver \
 allowlistがないため、信頼できるprivate LANでのみ使い、macOS firewallでも受信元を
 制限してください。将来のcontent APIをLANへ公開する指定ではありません。
 
+## content配信
+
+`HubDistribution`が、較正済みのHub snapshotをUnityなどのcontentへUDPで配信します。
+
+```text
+HubStateStore
+  → evaluatedSnapshot（liveness評価）
+  → CalibrationResolver.project（Stage Space変換）
+  → StageFrameProjection（wire modelへ写像）
+  → StageFrameEncoder（envelope + FlatBuffers）
+  → 購読中のclientへ送信
+```
+
+配信tickごとにsnapshotを取り直すため、送れなかったframeは貯まりません。`blocked`の
+Trackerは姿勢を落とし、区分と状態だけを配信します。
+
+- 既定bindは`127.0.0.1:41321`
+- contentがTTL付きの購読を送り続ける間だけ配信する
+- 既定でloopback以外からの購読を拒否する
+- 上限を超えるframeはsilent truncateせずencode errorとして計上する
+
+Simulatorから配信して試せます。Simulatorの追跡空間は未較正なので、既定では
+preview modeで生のTracker Spaceを明示して配信します。
+
+```bash
+swift run --package-path hub divive-simulator --motion circle --publish
+```
+
+受け手の実装と手順は[unity/README.md](../unity/README.md)にあります。
+
 ## Schema code generation
 
-生成済みSwift bindingは
-`Sources/HubProtocol/Generated/pose_generated.swift`へcommitします。このファイルは
-手編集しません。
+生成済みbindingは、Swiftを`Sources/HubProtocol/Generated/`へ、C#を
+`unity/com.divive.tracking/Runtime/Generated/`へcommitします。どちらも手編集しません。
 
 ```bash
 cmake --preset macos-debug
 cmake --build --preset macos-debug --target flatc
-build/macos-debug/_deps/divive_flatbuffers-build/flatc \
-  --swift \
-  -o hub/Sources/HubProtocol/Generated \
-  protocol/schema/pose.fbs
-python3 scripts/normalize_generated_swift.py \
-  hub/Sources/HubProtocol/Generated/pose_generated.swift
+python3 scripts/generate_bindings.py
 ```
 
 生成後は`swift test`とC++ protocol conformance testを両方実行します。CIでも生成結果と
@@ -160,7 +186,9 @@ commit済みbindingのbyte一致を検査します。
 - Windows実機BridgeとのGUI結合は未検証
 - HMAC、allowlist、clock mapping、jitter推定は未実装
 - GUIの較正はorigin and forwardのみで、point-set registrationの対応点取得がない
-- role永続化、content配信、presentation scaleは未実装
+- role永続化とpresentation scaleは未実装
+- content配信はCLIからのみ。Mac GUIからの開始・停止と状態表示は未実装
+- content配信に認証がないため、既定のloopback bindを外さない
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる
 ことを先に固定します。copy最適化は受信処理時間の計測結果を見て判断します。

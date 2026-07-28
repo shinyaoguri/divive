@@ -7,7 +7,12 @@ public enum WireProtocol {
 }
 
 public enum MessageType: UInt8, Sendable {
+  /// Bridge → Hub。Tracker Spaceのpose batch。
   case poseBatch = 1
+  /// Hub → content。較正とliveness評価を適用したStage Spaceの最新値。
+  case stageFrame = 2
+  /// content → Hub。配信先を登録・更新する購読。
+  case stageSubscription = 3
 }
 
 public struct PacketEnvelope: Equatable, Sendable {
@@ -56,6 +61,7 @@ public enum PacketDecodeError: Error, Equatable, Sendable, CustomStringConvertib
   case invalidPayloadLength
   case invalidBatch
   case unknownMessageType
+  case unexpectedMessageType
   case nilSessionID
   case nilBridgeID
   case unexpectedAuthTag
@@ -80,6 +86,7 @@ public enum PacketDecodeError: Error, Equatable, Sendable, CustomStringConvertib
     case .invalidPayloadLength: "invalid_payload_length"
     case .invalidBatch: "invalid_batch"
     case .unknownMessageType: "unknown_message_type"
+    case .unexpectedMessageType: "unexpected_message_type"
     case .nilSessionID: "nil_session_id"
     case .nilBridgeID: "nil_bridge_id"
     case .unexpectedAuthTag: "unexpected_auth_tag"
@@ -96,14 +103,102 @@ public enum PacketDecodeError: Error, Equatable, Sendable, CustomStringConvertib
   }
 }
 
+public enum PacketEncodeError: Error, Equatable, Sendable, CustomStringConvertible {
+  case payloadEmpty
+  case payloadTooLarge(actual: Int, limit: Int)
+  case nilSessionID
+  case nilSourceID
+  case invalidBatch
+
+  public var description: String {
+    switch self {
+    case .payloadEmpty: "payload_empty"
+    case let .payloadTooLarge(actual, limit):
+      "payload_too_large(actual: \(actual), limit: \(limit))"
+    case .nilSessionID: "nil_session_id"
+    case .nilSourceID: "nil_source_id"
+    case .invalidBatch: "invalid_batch"
+    }
+  }
+}
+
+/// 72-byte envelopeを組み立てる。数値はnetwork byte orderで書く。
+///
+/// C++ Bridgeと同じlayoutを生成するが、structのmemory layoutは送信しない。
+public struct EnvelopeEncoder: Sendable {
+  public let maximumDatagramSize: Int
+
+  public init(maximumDatagramSize: Int = WireProtocol.maximumDatagramSize) {
+    self.maximumDatagramSize = maximumDatagramSize
+  }
+
+  public func encode(
+    envelope: PacketEnvelope,
+    payload: [UInt8]
+  ) throws -> [UInt8] {
+    guard !payload.isEmpty else {
+      throw PacketEncodeError.payloadEmpty
+    }
+    let limit = maximumDatagramSize - WireProtocol.envelopeSize
+    guard payload.count <= limit else {
+      throw PacketEncodeError.payloadTooLarge(actual: payload.count, limit: limit)
+    }
+    guard !envelope.sessionID.isNil else {
+      throw PacketEncodeError.nilSessionID
+    }
+    guard !envelope.bridgeID.isNil else {
+      throw PacketEncodeError.nilSourceID
+    }
+    guard envelope.batchCount > 0, envelope.batchIndex < envelope.batchCount else {
+      throw PacketEncodeError.invalidBatch
+    }
+
+    var datagram = [UInt8]()
+    datagram.reserveCapacity(WireProtocol.envelopeSize + payload.count)
+    datagram.append(contentsOf: [0x44, 0x56, 0x49, 0x56])
+    datagram.append(WireProtocol.protocolMajor)
+    datagram.append(envelope.protocolMinor)
+    datagram.append(envelope.messageType.rawValue)
+    datagram.append(envelope.flags)
+    append(UInt16(WireProtocol.envelopeSize), to: &datagram)
+    append(UInt16(payload.count), to: &datagram)
+    append(envelope.batchIndex, to: &datagram)
+    append(envelope.batchCount, to: &datagram)
+    datagram.append(contentsOf: envelope.sessionID.bytes)
+    datagram.append(contentsOf: envelope.bridgeID.bytes)
+    append(envelope.frameSequence, to: &datagram)
+    // auth tagはHMACを実装するまで全byte 0。decoderも非zeroを拒否する。
+    datagram.append(contentsOf: [UInt8](repeating: 0, count: 16))
+    datagram.append(contentsOf: payload)
+    return datagram
+  }
+
+  private func append(_ value: UInt16, to datagram: inout [UInt8]) {
+    datagram.append(UInt8((value >> 8) & 0xff))
+    datagram.append(UInt8(value & 0xff))
+  }
+
+  private func append(_ value: UInt64, to datagram: inout [UInt8]) {
+    for shift in stride(from: 56, through: 0, by: -8) {
+      datagram.append(UInt8((value >> UInt64(shift)) & 0xff))
+    }
+  }
+}
+
 public struct EnvelopeDecoder: Sendable {
-  public init() {}
+  /// datagram上限はpathごとに異なる。Bridge → HubはIP fragmentationを避けるため
+  /// 1,200 byteだが、loopback限定のstage planeはより大きなdatagramを許す。
+  public let maximumDatagramSize: Int
+
+  public init(maximumDatagramSize: Int = WireProtocol.maximumDatagramSize) {
+    self.maximumDatagramSize = maximumDatagramSize
+  }
 
   public func decode(_ datagram: [UInt8]) throws -> ParsedDatagram {
     guard datagram.count >= WireProtocol.envelopeSize else {
       throw PacketDecodeError.datagramTooShort
     }
-    guard datagram.count <= WireProtocol.maximumDatagramSize else {
+    guard datagram.count <= maximumDatagramSize else {
       throw PacketDecodeError.datagramTooLarge
     }
     guard Array(datagram[0..<4]) == [0x44, 0x56, 0x49, 0x56] else {
@@ -119,7 +214,7 @@ public struct EnvelopeDecoder: Sendable {
     }
     let payloadLength = Int(readUInt16(datagram, at: 10))
     guard payloadLength > 0,
-      payloadLength <= WireProtocol.maximumPayloadSize,
+      payloadLength <= maximumDatagramSize - WireProtocol.envelopeSize,
       datagram.count == Int(headerLength) + payloadLength
     else {
       throw PacketDecodeError.invalidPayloadLength

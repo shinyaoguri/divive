@@ -8,15 +8,21 @@ from pathlib import Path
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("使用方法: normalize_generated_swift.py <source>", file=sys.stderr)
+    if len(sys.argv) < 2:
+        print(
+            "使用方法: normalize_generated_swift.py <source> [<source> ...]",
+            file=sys.stderr,
+        )
         return 2
 
-    source = Path(sys.argv[1])
-    lines = [line.rstrip() for line in source.read_text(encoding="utf-8").splitlines()]
-    while lines and not lines[-1]:
-        lines.pop()
-    source.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for argument in sys.argv[1:]:
+        source = Path(argument)
+        lines = [
+            line.rstrip() for line in source.read_text(encoding="utf-8").splitlines()
+        ]
+        while lines and not lines[-1]:
+            lines.pop()
+        source.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return 0
 
 

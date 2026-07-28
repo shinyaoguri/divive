@@ -1,6 +1,8 @@
 import Dispatch
 import Foundation
+import HubCalibration
 import HubCore
+import HubDistribution
 import HubProtocol
 import HubSimulator
 
@@ -26,6 +28,13 @@ private struct Options {
   var disconnectProbability = 0.0
   var disconnectDurationMilliseconds: UInt64 = 2_500
   var printPose = false
+  var publish = false
+  var publishHost = "127.0.0.1"
+  var publishPort = StageWireProtocol.defaultPort
+  var publishRate: UInt16 = 0
+  // Simulatorの追跡空間には較正profileがない。productionでは全Trackerがblockedに
+  // なるため、既定はpreviewにして「生のTracker Spaceである」ことを明示して配信する。
+  var publishMode: CalibrationDeliveryMode = .preview
 
   static func parse(_ arguments: [String]) throws -> Self {
     var options = Self()
@@ -125,6 +134,40 @@ private struct Options {
         )
       case "--print-pose":
         options.printPose = true
+      case "--publish":
+        options.publish = true
+      case "--publish-host":
+        index += 1
+        guard index < arguments.count, !arguments[index].isEmpty else {
+          throw OptionError.missingValue("--publish-host")
+        }
+        options.publishHost = arguments[index]
+      case "--publish-port":
+        index += 1
+        guard index < arguments.count,
+          let port = Int(arguments[index]),
+          (0...65_535).contains(port)
+        else {
+          throw OptionError.invalidPublishPort
+        }
+        options.publishPort = port
+      case "--publish-rate":
+        index += 1
+        guard index < arguments.count,
+          let rate = UInt16(arguments[index]),
+          (1...1_000).contains(rate)
+        else {
+          throw OptionError.invalidPublishRate
+        }
+        options.publishRate = rate
+      case "--publish-mode":
+        index += 1
+        guard index < arguments.count,
+          let mode = CalibrationDeliveryMode(rawValue: arguments[index])
+        else {
+          throw OptionError.invalidPublishMode
+        }
+        options.publishMode = mode
       case "--help", "-h":
         printUsage()
         exit(0)
@@ -179,6 +222,9 @@ private enum OptionError: Error, CustomStringConvertible {
   case invalidMotion
   case invalidProbability(String)
   case invalidDuration(String)
+  case invalidPublishPort
+  case invalidPublishRate
+  case invalidPublishMode
   case unknownArgument(String)
 
   var description: String {
@@ -194,6 +240,9 @@ private enum OptionError: Error, CustomStringConvertible {
       "\(option) は0〜1の小数で指定してください"
     case .invalidDuration(let option):
       "\(option) は0以上の整数（ミリ秒）で指定してください"
+    case .invalidPublishPort: "--publish-port は0〜65535で指定してください"
+    case .invalidPublishRate: "--publish-rate は1〜1000で指定してください"
+    case .invalidPublishMode: "--publish-mode はproductionかpreviewです"
     case .unknownArgument(let argument): "不明な引数です: \(argument)"
     }
   }
@@ -218,6 +267,14 @@ private func printUsage() {
       --disconnect RATE      接続断開始確率。0〜1、既定値: 0
       --disconnect-ms MS     1回の接続断時間。既定値: 2500
       --print-pose           emitted frameごとの姿勢を表示
+
+      --publish              Unityなどのcontentへstage frameをUDP配信する
+      --publish-host HOST    配信socketのbind先。既定値: 127.0.0.1
+      --publish-port PORT    配信port。既定値: \(StageWireProtocol.defaultPort)
+      --publish-rate HZ      配信頻度。0は--rateに合わせる。既定値: 0
+      --publish-mode MODE    production / preview。既定値: preview
+                             Simulatorの追跡空間は未較正のため、productionでは
+                             全Trackerがblockedになり姿勢を配信しない。
     """
   )
 }
@@ -305,6 +362,66 @@ private func makeTrackers(_ options: Options) -> [SimulatorTrackerConfiguration]
   }
 }
 
+/// contentへstage frameを配信するdistributorを開始する。
+///
+/// Simulatorの追跡空間には較正がないため、profileは空のまま渡す。identity
+/// transformを黙って補わず、preview modeで生のTracker Spaceだと明示する。
+private func startDistributor(
+  _ options: Options,
+  store: HubStateStore
+) throws -> StageDistributor? {
+  guard options.publish else { return nil }
+
+  let publishRate =
+    options.publishRate == 0 ? options.rate.rawValue : options.publishRate
+  let now = Date()
+  let resolver = CalibrationResolver(
+    profile: try CalibrationProfile(
+      profileID: "simulator",
+      name: "Simulator",
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      applicationVersion: "0.1.0-dev"
+    ),
+    mode: options.publishMode
+  )
+  let distributor = StageDistributor(
+    sessionID: try makeUUID(namespace: 4, seed: options.seed),
+    sourceID: try makeUUID(namespace: 5, seed: options.seed)
+  )
+
+  let address = try distributor.start(
+    configuration: StageDistributorConfiguration(
+      host: options.publishHost,
+      port: options.publishPort,
+      publishRateHz: publishRate
+    ),
+    snapshotProvider: {
+      // 配信tickごとに最新値を取り直す。送れなかったframeは貯めない。
+      StageFrameProjection.makeFrame(
+        from: resolver.project(
+          store.evaluatedSnapshot(
+            atMonotonicNS: DispatchTime.now().uptimeNanoseconds
+          )
+        ),
+        publishRateHz: publishRate
+      )
+    }
+  )
+
+  print(
+    "stage frameを配信します: \(address) rate=\(publishRate)Hz "
+      + "mode=\(options.publishMode.rawValue)"
+  )
+  if options.publishMode == .preview {
+    print(
+      "Simulatorの追跡空間は未較正のため、Stage Spaceではなく生のTracker Spaceを配信します"
+    )
+  }
+  return distributor
+}
+
 private func printStatistics(
   attemptedFrames: UInt64,
   emittedFrames: UInt64,
@@ -313,23 +430,33 @@ private func printStatistics(
   missedDeadlines: UInt64,
   transport: SimulatorTransportFaultStatistics,
   store: HubStateStore,
+  distributor: StageDistributor?,
   monotonicNS: UInt64
 ) {
   let state = store.evaluatedSnapshot(atMonotonicNS: monotonicNS)
   let simulated = state.trackers.count { $0.trackingState == .simulated }
   let lost = state.trackers.count { $0.trackingState == .lost }
   let disconnected = state.trackers.count { $0.trackingState == .disconnected }
-  print(
+  var line =
     "attempted=\(attemptedFrames) emitted=\(emittedFrames) "
-      + "dropped=\(droppedFrames) stale=\(staleFrames) "
-      + "disconnect_events=\(transport.disconnectEvents) "
-      + "disconnect_dropped=\(transport.disconnectedFrames) "
-      + "pending=\(transport.pendingFrames) "
-      + "overflow=\(transport.overflowFrames) "
-      + "missed_deadlines=\(missedDeadlines) "
-      + "trackers=\(state.trackers.count) simulated=\(simulated) "
-      + "lost=\(lost) trackers_disconnected=\(disconnected)"
-  )
+    + "dropped=\(droppedFrames) stale=\(staleFrames) "
+    + "disconnect_events=\(transport.disconnectEvents) "
+    + "disconnect_dropped=\(transport.disconnectedFrames) "
+    + "pending=\(transport.pendingFrames) "
+    + "overflow=\(transport.overflowFrames) "
+    + "missed_deadlines=\(missedDeadlines) "
+    + "trackers=\(state.trackers.count) simulated=\(simulated) "
+    + "lost=\(lost) trackers_disconnected=\(disconnected)"
+
+  if let statistics = distributor?.statistics() {
+    line +=
+      " subscribers=\(statistics.activeSubscribers) "
+      + "published=\(statistics.publishedFrames) "
+      + "sent=\(statistics.sentDatagrams) "
+      + "publish_errors=\(statistics.encodeErrors) "
+      + "invalid_subscriptions=\(statistics.invalidSubscriptionPackets)"
+  }
+  print(line)
 }
 
 do {
@@ -366,6 +493,7 @@ do {
   let store = HubStateStore()
   let sink: any HubFrameSink = store
   let stopFlag = StopFlag()
+  let distributor = try startDistributor(options, store: store)
 
   signal(SIGINT, SIG_IGN)
   let interruptSource = DispatchSource.makeSignalSource(signal: SIGINT)
@@ -461,6 +589,7 @@ do {
         missedDeadlines: missedDeadlines,
         transport: transport.statistics,
         store: store,
+        distributor: distributor,
         monotonicNS: receivedNS
       )
     }
@@ -476,8 +605,10 @@ do {
     missedDeadlines: missedDeadlines,
     transport: transport.statistics,
     store: store,
+    distributor: distributor,
     monotonicNS: DispatchTime.now().uptimeNanoseconds
   )
+  try distributor?.shutdown()
   print("divive-simulatorを終了しました")
 } catch {
   fputs("起動できませんでした: \(error)\n", stderr)

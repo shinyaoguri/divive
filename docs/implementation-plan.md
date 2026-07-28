@@ -224,6 +224,17 @@ UDP receive
 
 network event loopでファイルI/O、UI更新、圧縮を行いません。
 
+`HubDistribution`がcontent向けのdistributorです。配信tickごとに較正済みsnapshotを
+取り直し、購読中のclientへstage frameを送ります。送れなかったframeを貯めません。
+決定は[ADR 0006](adr/0006-stage-plane-content-transport.md)にあります。
+
+- [x] localhost UDPのstage frame配信
+- [x] TTL付き購読とloopback以外の拒否
+- [x] 較正区分ごとの配信可否（blockedは姿勢を送らない）
+- [x] 配信統計（購読者数、送信数、encode error）
+- [ ] Mac GUIからの配信の開始・停止と状態表示
+- [ ] 認証（token、HMAC）とLANへの配信
+
 ### D2. State model
 
 - [x] Tracker stateは最新値を1つ保持
@@ -264,14 +275,18 @@ pose eventをqueueしません。起動方法と制約は[Mac Hub GUI](../hub/GU
 
 最初のcontent consumerです。
 
-- Hub discovery/connect
-- Tracker列挙
-- ID/role lookup
-- latest pose
-- GameObject binding
-- lost/reconnected events
-- interpolation setting
-- coordinate conformance tests
+- [x] Hub接続（localhost UDP、TTL付き購読）
+- [x] Tracker列挙
+- [x] ID / role lookup
+- [x] latest pose（受信threadからmain threadへlatest valueのみ）
+- [x] GameObject binding（`DiviveTrackerBinding`）
+- [x] Tracker出現・消滅と接続状態のevent
+- [x] canonical → Unity座標の変換とconformance test
+- [x] golden vectorによるSwiftとC#のdecode一致
+- [x] 較正区分（stage / raw_tracker_space / blocked）の公開
+- [ ] Hub discovery（mDNS）
+- [ ] clock mappingに基づく描画時刻への補間
+- [ ] roleのcontent側profileと表示scale
 
 ### E1. p5.js
 

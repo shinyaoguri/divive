@@ -2,11 +2,30 @@
 
 Windows Bridge、Mac Hub ingest、Simulator、Playbackが共有するwire contractです。
 取得backend固有の型を公開APIへ漏らさず、同じgolden packetを各言語で検証します。
-Hubからcontent SDKへの出力schemaは、このcanonical semanticsを基準に別途確定します。
+Hubからcontent SDKへ配信するstage planeも、同じenvelopeとcanonical semanticsを
+共有します。
+
+## 2つのplane
+
+同じenvelopeを、責務の違う2つの経路で使います。
+
+| Plane | 経路 | Message type | Datagram上限 | Payload |
+| --- | --- | ---: | ---: | --- |
+| pose | Bridge → Hub | `1` | 1,200 | `DVPS` [pose.fbs](schema/pose.fbs) |
+| stage | Hub → content | `2` | 8,192 | `DVST` [stage.fbs](schema/stage.fbs) |
+| subscription | content → Hub | `3` | 8,192 | `DVSC` [stage_subscription.fbs](schema/stage_subscription.fbs) |
+
+pose planeはLANを渡るためIP fragmentationを避ける必要があり、1,200 byteに収まるよう
+batch分割します。stage planeは既定でloopbackに閉じるため分割せず、16台規模のTrackerを
+1 datagramへ収めます。決定の背景は[ADR 0006](../docs/adr/0006-stage-plane-content-transport.md)に
+あります。
+
+decoderは自分のplaneのmessage typeだけを受理し、それ以外を
+`unexpected_message_type`として拒否します。
 
 ## Protocol v1
 
-UDP datagram全体の上限は1,200 byteです。
+pose planeのUDP datagram全体の上限は1,200 byteです。
 
 ```text
 72-byte fixed envelope
@@ -21,7 +40,7 @@ FlatBuffers runtimeへ任せ、手動変換しません。
 | 0 | 4 | magic | ASCII `DVIV` |
 | 4 | 1 | protocol major | `1` |
 | 5 | 1 | protocol minor | `0` |
-| 6 | 1 | message type | `1`: pose batch |
+| 6 | 1 | message type | `1`: pose batch、`2`: stage frame、`3`: subscription |
 | 7 | 1 | flags | M1では`0`のみ |
 | 8 | 2 | header length | `72` |
 | 10 | 2 | payload length | 1〜1,128 |
@@ -83,13 +102,31 @@ MVPの最大16台ではgreedy encodeの計算量より、実際のwire sizeと�
 CMake configure時に公式`google/flatbuffers`から取得し、同じsourceから`flatc`と
 C++ runtime headerを使います。
 
+## Stage plane
+
+Hubは較正とliveness評価を済ませた最新値だけを配信します。取得backend、Bridgeの
+batch分割、未較正spaceの生の姿勢はcontentへ渡しません。
+
+- `delivery`はTrackerごとの配信区分。`Stage` / `RawTrackerSpace` / `Blocked`
+- `Blocked`のTrackerは姿勢fieldを持たない。IDとroleと状態は残す
+- `liveness`は受信ageの評価で、`tracking_state`とは独立
+- `batch_index` / `batch_count`は予約。v1では`0` / `1`以外を拒否する
+- 購読はTTL付き。contentがTTL内に更新し続ける間だけ配信する
+- Hubは既定でloopbackからの購読しか受け付けない
+
+`requested_rate_hz`は診断表示にだけ使い、v1のHubは自身の設定rateで配信します。
+
 ## Golden vector
 
-- [pose_v1.packet.hex](golden/pose_v1.packet.hex): envelopeを含むpacket全体
-- [pose_v1.expected.json](golden/pose_v1.expected.json): 主要な期待値
+| Plane | Packet | 期待値 |
+| --- | --- | --- |
+| pose | [pose_v1.packet.hex](golden/pose_v1.packet.hex) | [pose_v1.expected.json](golden/pose_v1.expected.json) |
+| stage | [stage_v1.packet.hex](golden/stage_v1.packet.hex) | [stage_v1.expected.json](golden/stage_v1.expected.json) |
 
-`divive_protocol_tests`は、その場で生成したpacketがhexとbyte単位で一致することを
-検査します。将来のSwift、C#、TypeScript実装もこのvectorを読みます。
+`divive_protocol_tests`は、その場で生成したpose packetがhexとbyte単位で一致すること
+を検査します。stage packetはSwiftの`StageFrameCodecTests`がdecodeと再encodeのbyte
+一致を検査し、同じfileをUnity SDKの`DiviveStageFrameDecoderTests`が読みます。
+将来のTypeScript実装もこのvectorを読みます。
 
 Golden vectorを意図的に更新する場合:
 
@@ -97,7 +134,23 @@ Golden vectorを意図的に更新する場合:
 cmake --preset macos-debug
 cmake --build --preset macos-debug
 ./build/macos-debug/protocol/tests/divive_protocol_golden_tool
+swift run --package-path hub divive-stage-golden > protocol/golden/stage_v1.packet.hex
+cp protocol/golden/stage_v1.packet.hex \
+  unity/com.divive.tracking/Tests/Editor/Fixtures/stage_v1.packet.hex.txt
 ```
 
 出力を置き換えるだけでなく、schema compatibilityとprotocol version変更の要否を
-レビューしてください。
+レビューしてください。Unity Packageの写しを更新し忘れると、Hubの
+`StageFrameCodecTests`が失敗します。
+
+## Binding生成
+
+Swift（Hub）とC#（Unity）のbindingはrepositoryへcommitしています。SwiftとC#のbuildに
+flatcを要求しないためです。schemaを変えたら生成し直してcommitします。
+
+```bash
+python3 scripts/generate_bindings.py
+```
+
+`divive_protocol_swift_codegen_check`と`divive_protocol_csharp_codegen_check`が、
+commit済みbindingとschemaの乖離をbuild時に検出します。
