@@ -113,9 +113,11 @@ pose frameの履歴queueは作らず、常にlatest valueを優先します。UD
 - profileのJSON atomic保存と、読み込み失敗時のidentity fallback禁止
 - SDK横断で共有するgolden fixture
 - origin and forward手順の推定、退化検出、known pointによるresidual評価
+- 評価済みHub snapshotへの較正適用と、Tracker単位の`stage` / `rawTrackerSpace` /
+  `blocked`区分
 
-Hubのingest pipelineとGUIへはまだ結線していません。point-set registrationと
-presentation scaleも未実装です。
+Mac GUIへはまだ結線しておらず、較正状態の表示と較正操作がありません。
+point-set registrationとpresentation scaleも未実装です。
 
 主要な入口:
 
@@ -124,6 +126,7 @@ presentation scaleも未実装です。
 - [Calibration golden fixture](../calibration/README.md)
 - [Issue #21](https://github.com/shinyaoguri/divive/issues/21)
 - [Issue #23](https://github.com/shinyaoguri/divive/issues/23)
+- [Issue #27](https://github.com/shinyaoguri/divive/issues/27)
 
 ### SimulatorとMac GUI
 
@@ -230,7 +233,7 @@ Ultimate TrackerのH2、3〜5台同時試験、Windows BridgeからMacへの有�
 
 ### Hubとcontent
 
-- calibrationのingest pipeline / GUI結線とpoint-set registration
+- calibrationのGUI結線とpoint-set registration
 - role mappingの永続化
 - Unity Packageとcontent向けlocal API
 - MCAP Recorder / Playback
@@ -272,8 +275,8 @@ backendを無条件に確定したり、Ultimate対応済みと表現したり�
 calibration coreは[Issue #21](https://github.com/shinyaoguri/divive/issues/21)で
 実装済みです。次は較正結果を実際に使う経路を2つに分けて進めます。
 
-1. `HubStateStore`とGUIへ`CalibrationResolver`と`OriginAndForwardEstimator`を
-   結線し、未較正spaceの表示、production / preview切替、較正操作を可視化する
+1. Mac GUIへ`CalibrationResolver.project(_:)`と`OriginAndForwardEstimator`を結線し、
+   未較正spaceの表示、production / preview切替、較正操作を可視化する
 2. point-set registrationとresidual表示を独立したIssueとして定義する
 
 どちらもUnity SDKやRecorderより先に固定します。content向けlocal transportを

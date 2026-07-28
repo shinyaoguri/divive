@@ -177,13 +177,19 @@ Swift側の`HubCalibration`が、rigid transform、profile、gate、永続化、
 | `CalibrationResolver` | `tracking_space_id`と`space_epoch`の引き当てとStage変換 |
 | `CalibrationStore` | JSONへのatomic保存と読み込み |
 | `OriginAndForwardEstimator` | origin and forward手順の推定、退化検出、residual評価 |
+| `CalibrationResolver.project(_:)` | 評価済みHub snapshotへの較正適用とTracker単位の配信区分 |
 
 `CalibrationResolver`は較正済みspaceを`stage`、未較正を`uncalibrated`、epoch不一致を
 `epochMismatch`として返します。production modeでは後2者を配信せず、preview modeでは
 生Tracker Spaceであることを明示したうえで変換せずに通します。
 
+`project(_:)`はTrackerごとに`stage` / `rawTrackerSpace` / `blocked`を付け、変換前の
+Tracker Space poseとliveness評価を残したまま返します。未較正のTrackerをsnapshotから
+取り除かないのは、「表示しない」と「較正済みとして表示する」のどちらでもoperatorが
+状況を把握できなくなるためです。
+
 point-set registration、Content Profile Spaceのpresentation scale、role mappingの
-永続化、Hub pipelineとGUIへの結線はまだ実装していません。
+永続化、Mac GUIへの表示と較正操作はまだ実装していません。
 
 
 ## Engine座標への変換

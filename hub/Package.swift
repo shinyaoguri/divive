@@ -49,7 +49,7 @@ let package = Package(
     ),
     .target(
       name: "HubCalibration",
-      dependencies: ["HubProtocol"]
+      dependencies: ["HubCore", "HubProtocol"]
     ),
     .target(
       name: "HubSimulator",
@@ -96,7 +96,7 @@ let package = Package(
     ),
     .testTarget(
       name: "HubCalibrationTests",
-      dependencies: ["HubCalibration", "HubProtocol"]
+      dependencies: ["HubCalibration", "HubCore", "HubProtocol"]
     ),
     .testTarget(
       name: "HubSimulatorTests",
