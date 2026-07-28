@@ -589,8 +589,8 @@ private final class TrackerRealityScene: ObservableObject {
   /// 実寸ではpreview内で視認できないため、姿勢を読める大きさへ拡大する。
   private let trackerShape = ViveTrackerShape(widthMeters: 0.033)
   /// Tracker間で同じmeshを共有し、16台でもGPU資源を増やさない。
-  private lazy var trackerShellMesh: MeshResource =
-    trackerShape.shellMesh().makeResource(name: "vive-tracker-shell")
+  private lazy var trackerBodyMesh: MeshResource =
+    trackerShape.bodyMesh().makeResource(name: "vive-tracker-body")
     ?? .generateBox(
       size: SIMD3(
         trackerShape.widthMeters,
@@ -599,12 +599,8 @@ private final class TrackerRealityScene: ObservableObject {
       ),
       cornerRadius: trackerShape.heightMeters * 0.3
     )
-  private lazy var trackerTopPlateMesh: MeshResource? =
-    trackerShape.topPlateMesh().makeResource(
-      name: "vive-tracker-top-plate"
-    )
   private lazy var sensorWellHeight: Float =
-    trackerShape.sensorWellRadius * 0.6
+    trackerShape.sensorWellRadius * 0.45
   private lazy var sensorWellMesh: MeshResource = .generateCylinder(
     height: sensorWellHeight,
     radius: trackerShape.sensorWellRadius
@@ -965,18 +961,10 @@ private final class TrackerRealityScene: ObservableObject {
     tracker.name = Self.trackerNamePrefix + id
 
     let body = ModelEntity(
-      mesh: trackerShellMesh,
+      mesh: trackerBodyMesh,
       materials: [shellMaterial(color: .systemBlue)]
     )
     tracker.addChild(body)
-
-    if let topPlateMesh = trackerTopPlateMesh {
-      let topPlate = ModelEntity(
-        mesh: topPlateMesh,
-        materials: [shellMaterial(color: Self.trackerCaseColor)]
-      )
-      tracker.addChild(topPlate)
-    }
 
     for anchor in trackerShape.sensorWellAnchors() {
       let well = ModelEntity(
@@ -986,9 +974,10 @@ private final class TrackerRealityScene: ObservableObject {
         ]
       )
       // 円柱の軸は+Yなので、外向き法線へ倒して表面へ沿わせる。
+      // 実機の窪みに見えるよう、本体へ沈めて縁だけを見せる。
       well.orientation = simd_quatf(from: SIMD3(0, 1, 0), to: anchor.normal)
       well.position =
-        anchor.position + anchor.normal * (sensorWellHeight * 0.2)
+        anchor.position - anchor.normal * (sensorWellHeight * 0.34)
       tracker.addChild(well)
     }
 
@@ -1028,14 +1017,14 @@ private final class TrackerRealityScene: ObservableObject {
     tracker.addChild(statusLight)
 
     let forwardShaft = box(
-      size: SIMD3(0.003, 0.003, 0.036),
+      size: SIMD3(0.0022, 0.0022, 0.036),
       position: SIMD3(0, 0, -0.03),
       material: UnlitMaterial(color: .systemBlue)
     )
     tracker.addChild(forwardShaft)
 
     let forwardHead = ModelEntity(
-      mesh: .generateCone(height: 0.015, radius: 0.008),
+      mesh: .generateCone(height: 0.014, radius: 0.0055),
       materials: [UnlitMaterial(color: .systemBlue)]
     )
     forwardHead.position = SIMD3(0, 0, -0.054)
