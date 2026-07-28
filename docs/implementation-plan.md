@@ -196,15 +196,18 @@ Swift PackageとしてGUIから分離します。
 HubCore
 HubProtocol
 HubNetworking
+HubCalibration
 HubRecorder
 HubSimulator
 ```
 
-現在は`HubProtocol`、`HubNetworking`、`HubCore`、`divive-receiver`まで実装済みです。
+現在は`HubProtocol`、`HubNetworking`、`HubCore`、`HubCalibration`、
+`divive-receiver`まで実装済みです。
 `HubProtocol`はnetwork runtimeから独立させ、C++と共通のgolden packetで検証します。
 `HubCore`はBridgeごとに未完成frameを最大1つ保持し、frame再構成とlatest stateを
 担当します。latestの生データを変更せず、明示したHub monotonic timeからlivenessと
-実効tracking stateを評価できます。calibrationは次の段階で追加します。
+実効tracking stateを評価できます。`HubCalibration`はTracker SpaceからStage Spaceへの
+変換とprofileを持ちますが、ingest pipelineへはまだ結線していません。
 
 ### D1. Ingest pipeline
 
@@ -319,12 +322,15 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 
 ### F2. Calibration
 
-- profile persistence
-- rigid transform
-- optional presentation scaleの分離
-- multi-Bridge space UUID
-- profile version/epoch
-- residual error表示
+- [x] rigid transform（SE(3)、scaleを持たない）
+- [x] multi-Bridge space UUIDとprofile version/epoch
+- [x] 未較正・epoch不一致のgateとproduction / preview mode
+- [x] profile persistence（JSON、atomic、fallback禁止）
+- [x] SDK共通のgolden fixture
+- [ ] origin and forward較正手順の推定器
+- [ ] point-set registrationとresidual error表示
+- [ ] optional presentation scaleの分離
+- [ ] ingest pipelineとGUIへの結線
 
 ## 作業領域G: 運用
 

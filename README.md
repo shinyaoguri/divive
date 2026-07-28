@@ -117,7 +117,12 @@ testで固定しています。
 [Mac Hub headless receiver](hub/README.md)は、同じgolden packetのSwift decode、
 sequence/loss判定、SwiftNIO UDP受信、複数batch再構成、latest Tracker state、
 ageに基づくlost / disconnected評価、CLI診断まで実装済みです。Windows Bridgeとの
-実機vertical slice、GUI、calibration、content配信はまだ含みません。
+実機vertical sliceとcontent配信はまだ含みません。
+
+[Calibration core](calibration/README.md)は、Tracker SpaceからStage Spaceへの剛体
+変換、`tracking_space_id`ごとのprofile、未較正・epoch不一致のgate、profileの永続化、
+SDK共通のgolden fixtureまで実装済みです。Hubのingest pipelineとGUIへの結線、
+較正手順の推定器はまだ含みません。
 
 [Headless Simulator](hub/SIMULATOR.md)は、VIVE実機やWindowsがない状態で、
 決定論的なvirtual Tracker姿勢と再現可能なframe loss / tracking lostを同じ

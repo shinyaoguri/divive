@@ -1,0 +1,188 @@
+{
+  "formatVersion": 1,
+  "description": "Tracker Space から Stage Space への剛体変換のSDK共通適合性case。transformsは先頭が最初に適用される合成順で、期待値は手計算できる値だけを使う。",
+  "convention": {
+    "handedness": "right",
+    "unit": "metre",
+    "axes": "+X right, +Y up, -Z forward",
+    "quaternionOrder": "x, y, z, w",
+    "position": "p_stage = R * p_tracker + t",
+    "orientation": "q_stage = q ⊗ q_tracker",
+    "velocity": "rotationのみ適用しtranslationを加算しない",
+    "orientationComparison": "quaternion q と -q は同じrotationとして比較する"
+  },
+  "cases": [
+    {
+      "name": "identity",
+      "description": "identity transformはposeを変更しない。",
+      "transforms": [
+        { "translation": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0, 1.0] }
+      ],
+      "input": {
+        "position": [1.0, 2.0, 3.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.5, -1.0, 2.0],
+        "angularVelocity": [1.0, 0.0, -1.0]
+      },
+      "expected": {
+        "position": [1.0, 2.0, 3.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.5, -1.0, 2.0],
+        "angularVelocity": [1.0, 0.0, -1.0]
+      }
+    },
+    {
+      "name": "translation_only",
+      "description": "translationはpositionだけを移動し、orientationとvelocityを変えない。",
+      "transforms": [
+        { "translation": [1.0, 2.0, 3.0], "rotation": [0.0, 0.0, 0.0, 1.0] }
+      ],
+      "input": {
+        "position": [0.5, -0.25, 4.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.5, -1.0, 2.0],
+        "angularVelocity": [1.0, 0.0, -1.0]
+      },
+      "expected": {
+        "position": [1.5, 1.75, 7.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.5, -1.0, 2.0],
+        "angularVelocity": [1.0, 0.0, -1.0]
+      }
+    },
+    {
+      "name": "yaw_90_about_up",
+      "description": "+Y軸まわり90度。+X右が-Z前方へ、-Z前方の速度が-Xへ向く。",
+      "transforms": [
+        { "translation": [0.0, 0.0, 0.0], "rotation": [0.0, 0.7071068, 0.0, 0.7071068] }
+      ],
+      "input": {
+        "position": [1.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.0, 0.0, -1.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      },
+      "expected": {
+        "position": [0.0, 0.0, -1.0],
+        "orientation": [0.0, 0.7071068, 0.0, 0.7071068],
+        "linearVelocity": [-1.0, 0.0, 0.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      }
+    },
+    {
+      "name": "pitch_90_about_right",
+      "description": "+X軸まわり90度。+Y上が-Z奥へ、-Z前方の速度が+Y上へ向く。",
+      "transforms": [
+        { "translation": [0.0, 0.0, 0.0], "rotation": [0.7071068, 0.0, 0.0, 0.7071068] }
+      ],
+      "input": {
+        "position": [0.0, 1.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.0, 0.0, -1.0],
+        "angularVelocity": [1.0, 0.0, 0.0]
+      },
+      "expected": {
+        "position": [0.0, 0.0, 1.0],
+        "orientation": [0.7071068, 0.0, 0.0, 0.7071068],
+        "linearVelocity": [0.0, 1.0, 0.0],
+        "angularVelocity": [1.0, 0.0, 0.0]
+      }
+    },
+    {
+      "name": "roll_90_about_forward_axis",
+      "description": "+Z軸まわり90度。+X右が+Y上へ、+Y上の速度が-Xへ向く。",
+      "transforms": [
+        { "translation": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.7071068, 0.7071068] }
+      ],
+      "input": {
+        "position": [1.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.0, 1.0, 0.0],
+        "angularVelocity": [0.0, 0.0, 1.0]
+      },
+      "expected": {
+        "position": [0.0, 1.0, 0.0],
+        "orientation": [0.0, 0.0, 0.7071068, 0.7071068],
+        "linearVelocity": [-1.0, 0.0, 0.0],
+        "angularVelocity": [0.0, 0.0, 1.0]
+      }
+    },
+    {
+      "name": "yaw_90_then_translation",
+      "description": "rotationとtranslationを持つ変換。velocityへtranslationが混入しないことを固定する。",
+      "transforms": [
+        { "translation": [1.0, 2.0, 3.0], "rotation": [0.0, 0.7071068, 0.0, 0.7071068] }
+      ],
+      "input": {
+        "position": [1.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.0, 0.0, -1.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      },
+      "expected": {
+        "position": [1.0, 2.0, 2.0],
+        "orientation": [0.0, 0.7071068, 0.0, 0.7071068],
+        "linearVelocity": [-1.0, 0.0, 0.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      }
+    },
+    {
+      "name": "velocity_ignores_large_translation",
+      "description": "大きなtranslationでもlinear / angular velocityは不変。",
+      "transforms": [
+        { "translation": [10.0, -20.0, 30.0], "rotation": [0.0, 0.0, 0.0, 1.0] }
+      ],
+      "input": {
+        "position": [0.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [1.0, 2.0, 3.0],
+        "angularVelocity": [-1.0, 0.0, 2.0]
+      },
+      "expected": {
+        "position": [10.0, -20.0, 30.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [1.0, 2.0, 3.0],
+        "angularVelocity": [-1.0, 0.0, 2.0]
+      }
+    },
+    {
+      "name": "quaternion_sign_equivalence",
+      "description": "yaw_90_about_upの-q表現。成分は異なるが同じrotationとして扱う。",
+      "transforms": [
+        { "translation": [0.0, 0.0, 0.0], "rotation": [0.0, -0.7071068, 0.0, -0.7071068] }
+      ],
+      "input": {
+        "position": [1.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.0, 0.0, -1.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      },
+      "expected": {
+        "position": [0.0, 0.0, -1.0],
+        "orientation": [0.0, 0.7071068, 0.0, 0.7071068],
+        "linearVelocity": [-1.0, 0.0, 0.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      }
+    },
+    {
+      "name": "two_space_composition",
+      "description": "2つのtracking spaceを順に合成する。yaw 90度を2回重ねてyaw 180度になる。",
+      "transforms": [
+        { "translation": [0.0, 0.0, 0.0], "rotation": [0.0, 0.7071068, 0.0, 0.7071068] },
+        { "translation": [1.0, 0.0, 0.0], "rotation": [0.0, 0.7071068, 0.0, 0.7071068] }
+      ],
+      "input": {
+        "position": [1.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "linearVelocity": [0.0, 0.0, -1.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      },
+      "expected": {
+        "position": [0.0, 0.0, 0.0],
+        "orientation": [0.0, 1.0, 0.0, 0.0],
+        "linearVelocity": [0.0, 0.0, 1.0],
+        "angularVelocity": [0.0, 1.0, 0.0]
+      }
+    }
+  ]
+}

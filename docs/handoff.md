@@ -3,9 +3,10 @@
 ## この文書の目的
 
 この文書は、別の開発端末やAI agentがGitHub上の情報だけを使ってdiviveの開発を
-再開するための入口です。2026-07-27時点の基準は、PR
-[#18](https://github.com/shinyaoguri/divive/pull/18)を取り込んだ
-`main@f85b61de878617236027b7c640df9183a3ca1517`です。
+再開するための入口です。2026-07-28時点の基準は、PR
+[#18](https://github.com/shinyaoguri/divive/pull/18)のSimulator 3D操作と、
+[Issue #21](https://github.com/shinyaoguri/divive/issues/21)のcalibration coreまでを
+取り込んだ`main`です。
 
 進捗がこの文書より新しい場合は、次の順で判断してください。
 
@@ -101,6 +102,26 @@ pose frameの履歴queueは作らず、常にlatest valueを優先します。UD
 - [HubCore](../hub/Sources/HubCore)
 - [HubNetworking](../hub/Sources/HubNetworking)
 - [HubProtocol](../hub/Sources/HubProtocol)
+
+### Calibration core
+
+- scaleを持たないSE(3) `RigidTransform`と合成・逆変換
+- positionはrotationとtranslation、velocityはrotationだけを受ける
+- `tracking_space_id`ごとのprofile entryとformat version / revision / space epoch
+- 未較正は`uncalibrated`、epoch不一致は`epochMismatch`として区別
+- production modeは未較正spaceを配信せず、preview modeは生Tracker Spaceを明示
+- profileのJSON atomic保存と、読み込み失敗時のidentity fallback禁止
+- SDK横断で共有するgolden fixture
+
+Hubのingest pipelineとGUIへはまだ結線していません。較正手順の推定器
+（origin and forward、point-set registration）も未実装です。
+
+主要な入口:
+
+- [HubCalibration](../hub/Sources/HubCalibration)
+- [Calibration](calibration.md)
+- [Calibration golden fixture](../calibration/README.md)
+- [Issue #21](https://github.com/shinyaoguri/divive/issues/21)
 
 ### SimulatorとMac GUI
 
@@ -207,8 +228,8 @@ Ultimate TrackerのH2、3〜5台同時試験、Windows BridgeからMacへの有�
 
 ### Hubとcontent
 
-- calibration profile、rigid transform、space epoch適用
-- role mappingとprofileの永続化
+- calibrationのingest pipeline / GUI結線と較正手順の推定器
+- role mappingの永続化
 - Unity Packageとcontent向けlocal API
 - MCAP Recorder / Playback
 - JSON WebSocket、p5.js client
@@ -246,9 +267,15 @@ backendを無条件に確定したり、Ultimate対応済みと表現したり�
 
 ### Macだけで進める場合
 
-次の推奨はcalibration coreです。Unity SDKやRecorderより先に、Tracker Spaceから
-Stage Spaceへのrigid transform、`tracking_space_id`、profile version/epoch、
-profile persistence、golden testをIssueとして定義します。
+calibration coreは[Issue #21](https://github.com/shinyaoguri/divive/issues/21)で
+実装済みです。次は較正結果を実際に使う経路を2つに分けて進めます。
+
+1. `HubStateStore`とGUIへ`CalibrationResolver`を結線し、未較正spaceの表示と
+   production / preview切替を可視化する
+2. origin and forward較正手順の推定器を独立したIssueとして定義する
+
+どちらもUnity SDKやRecorderより先に固定します。content向けlocal transportを
+決める前に、Stage Spaceのpublic contractを確定させるためです。
 
 物理calibrationのscaleは1.0を維持し、演出用presentation scaleと分離します。
 複数Bridgeのspaceをcalibrationなしに混合してはいけません。詳細は
@@ -313,7 +340,8 @@ swift test --package-path hub
 swift run --package-path hub divive-hub-app
 ```
 
-PR #18 merge時点のHub testは90件です。test数だけでなく失敗0件を確認してください。
+calibration core追加時点のHub testは126件です。test数だけでなく失敗0件を確認して
+ください。
 
 ### Windows
 

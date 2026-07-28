@@ -5,6 +5,7 @@ on:
     paths:
       - "hub/**"
       - "protocol/**"
+      - "calibration/**"
       - ".github/workflows/hub.yml"
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - "hub/**"
       - "protocol/**"
+      - "calibration/**"
       - ".github/workflows/hub.yml"
 
 permissions:

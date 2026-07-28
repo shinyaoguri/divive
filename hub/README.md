@@ -26,6 +26,7 @@ Packageは次の責務に分けています。
 | `HubProtocol` | wire decode、canonical model、sequence/batch判定 |
 | `HubNetworking` | SwiftNIO UDP socket、受信時刻、metrics |
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
+| `HubCalibration` | rigid transform、calibration profile、space gate、profile永続化 |
 | `HubSimulator` | 固定step motion、Tracker編集、seed付き生成・配信障害注入 |
 | `HubAppUI` | UDP / Simulator runtime、source切替、10Hz latest snapshot、SwiftUI画面 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
@@ -83,6 +84,8 @@ testは次を含みます。
 - liveness policy検証、age境界、source状態保持、partialからの復帰
 - SimulatorのTracker編集、fixed-step motion、seed再現性、生成・配信fault、
   有界queue、Hub sink結合
+- SDK共通の`calibration/golden/transform_v1.cases.json`による変換適合性
+- calibration profileのJSON往復、未較正・epoch不一致のgate、読み込み失敗の拒否
 - GUI設定からのscene生成と実時間runtimeの開始・停止
 - 実UDP socketを使うlocalhost loopback
 
@@ -152,7 +155,9 @@ commit済みbindingのbyte一致を検査します。
 - liveness遷移eventの購読APIは未実装
 - Windows実機BridgeとのGUI結合は未検証
 - HMAC、allowlist、clock mapping、jitter推定は未実装
-- 3D表示、calibration、role永続化、content配信は未実装
+- calibrationはcore（変換、profile、gate、永続化）のみで、ingest pipelineとGUIへ
+  未結線
+- 較正手順の推定器、role永続化、content配信は未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる
 ことを先に固定します。copy最適化は受信処理時間の計測結果を見て判断します。
