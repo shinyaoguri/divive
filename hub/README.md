@@ -28,7 +28,7 @@ Packageは次の責務に分けています。
 | `HubCore` | 複数batch再構成、partial frame確定、latest state、liveness評価 |
 | `HubCalibration` | rigid transform、profile、space gate、永続化、較正推定、Stage projection |
 | `HubSimulator` | 固定step motion、Tracker編集、seed付き生成・配信障害注入 |
-| `HubAppUI` | UDP / Simulator runtime、source切替、10Hz latest snapshot、SwiftUI画面 |
+| `HubAppUI` | UDP / Simulator runtime、source切替、10Hz snapshot、較正操作、SwiftUI画面 |
 | `divive-receiver` | CLI引数、診断表示、graceful shutdown |
 | `divive-simulator` | Headless Simulatorの実時間CLI |
 | `divive-hub-app` | macOS SwiftUI開発用GUI |
@@ -90,6 +90,7 @@ testは次を含みます。
 - 評価済みsnapshotへの較正適用、blocked Trackerの保持、space単位のstatus
 - point-set registrationの既知transform回復、鏡像の非採用、退化検出、対称行列の固有値分解
 - GUI設定からのscene生成と実時間runtimeの開始・停止
+- GUIの較正操作、profile永続化と再読込、退化した較正の拒否、配信mode切替
 - 実UDP socketを使うlocalhost loopback
 
 ## Mac GUI
@@ -158,7 +159,7 @@ commit済みbindingのbyte一致を検査します。
 - liveness遷移eventの購読APIは未実装
 - Windows実機BridgeとのGUI結合は未検証
 - HMAC、allowlist、clock mapping、jitter推定は未実装
-- calibrationはGUIへ未結線で、較正状態の表示と較正操作がない
+- GUIの較正はorigin and forwardのみで、point-set registrationの対応点取得がない
 - role永続化、content配信、presentation scaleは未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる

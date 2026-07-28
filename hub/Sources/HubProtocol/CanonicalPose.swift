@@ -4,6 +4,9 @@ import Foundation
 public struct UUIDBytes: Hashable, Sendable, CustomStringConvertible {
   public static let byteCount = 16
 
+  /// 全ビットが0のnil UUID。未設定を表す既定値として使う。
+  public static let zero = UUIDBytes(words: (0, 0, 0, 0))
+
   public let bytes: [UInt8]
 
   public init(bytes: [UInt8]) throws {

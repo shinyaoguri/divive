@@ -58,6 +58,7 @@ let package = Package(
     .target(
       name: "HubAppUI",
       dependencies: [
+        "HubCalibration",
         "HubCore",
         "HubNetworking",
         "HubProtocol",
@@ -106,6 +107,7 @@ let package = Package(
       name: "HubAppUITests",
       dependencies: [
         "HubAppUI",
+        "HubCalibration",
         "HubCore",
         "HubNetworking",
         "HubProtocol",

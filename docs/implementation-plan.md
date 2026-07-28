@@ -207,8 +207,8 @@ HubSimulator
 `HubCore`はBridgeごとに未完成frameを最大1つ保持し、frame再構成とlatest stateを
 担当します。latestの生データを変更せず、明示したHub monotonic timeからlivenessと
 実効tracking stateを評価できます。`HubCalibration`はTracker SpaceからStage Spaceへの
-変換とprofileを持ち、評価済みsnapshotへ較正を適用できます。GUIへはまだ結線して
-いません。
+変換とprofileを持ち、評価済みsnapshotへ較正を適用します。GUIはこのprojectionを
+表示し、origin and forward手順で較正できます。
 
 ### D1. Ingest pipeline
 
@@ -249,6 +249,7 @@ network event loopでファイルI/O、UI更新、圧縮を行いません。
   age、deadline miss
 - [x] Network loss、duplicate、out-of-order、invalid packet
 - [ ] Network jitter、clock mapping、one-way latency推定
+- [x] 較正状態、配信mode、Stage位置の表示と較正操作
 - [ ] roleとprofile編集
 - [ ] record/playback操作
 - [x] Simulatorの開始、停止、設定反映
@@ -333,7 +334,8 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] point-set registrationと退化検出
 - [ ] residual error表示UIと外れ値の採否提示
 - [ ] optional presentation scaleの分離
-- [ ] Mac GUIへの較正状態表示と較正操作
+- [x] Mac GUIへの較正状態表示とorigin and forward較正
+- [ ] GUIからのpoint-set registration対応点取得
 
 ## 作業領域G: 運用
 
