@@ -75,6 +75,11 @@ let package = Package(
         "HubNetworking",
         "HubProtocol",
         "HubSimulator",
+      ],
+      resources: [
+        .copy("Resources/HTC_Vive_Tracker.usdz"),
+        // 帰属表示を配布物へ同梱するため、bundleへ入れる。
+        .copy("Resources/NOTICE.md"),
       ]
     ),
     .executableTarget(

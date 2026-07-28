@@ -584,10 +584,18 @@ private final class TrackerRealityScene: ObservableObject {
   private var baseStationEntities: [String: BaseStationEntityParts] = [:]
   private var renderedWorkspace: SimulatorWorkspaceDimensions?
 
-  /// 実機VIVE Trackerの外形比率を保った表示用geometry。
+  /// 実機VIVE Trackerの表示幅。
   ///
   /// 実寸ではpreview内で視認できないため、姿勢を読める大きさへ拡大する。
-  private let trackerShape = ViveTrackerShape(widthMeters: 0.033)
+  private static let trackerWidthMeters: Float = 0.033
+  /// 同梱した実機model。Tracker間でcloneして共有する。
+  private lazy var trackerModelTemplate:
+    (entity: Entity, extents: SIMD3<Float>)? = ViveTrackerModelAsset
+    .loadTemplate(widthMeters: Self.trackerWidthMeters)
+  /// modelを読めなかったときに使う手続き的な外形。
+  private let trackerShape = ViveTrackerShape(
+    widthMeters: TrackerRealityScene.trackerWidthMeters
+  )
   /// Tracker間で同じmeshを共有し、16台でもGPU資源を増やさない。
   private lazy var trackerBodyMesh: MeshResource =
     trackerShape.bodyMesh().makeResource(name: "vive-tracker-body")
@@ -960,6 +968,120 @@ private final class TrackerRealityScene: ObservableObject {
     let tracker = Entity()
     tracker.name = Self.trackerNamePrefix + id
 
+    // 実機modelを読めた場合はそれを使い、読めない場合だけ手続き的形状へ落とす。
+    var tintedBody: ModelEntity?
+    let bodyExtents: SIMD3<Float>
+    let bodyBottomY: Float
+    if let template = trackerModelTemplate {
+      tracker.addChild(template.entity.clone(recursive: true))
+      bodyExtents = template.extents
+      bodyBottomY = -template.extents.y / 2
+    } else {
+      tintedBody = addProceduralBody(to: tracker)
+      bodyExtents = SIMD3(
+        trackerShape.widthMeters,
+        trackerShape.heightMeters,
+        trackerShape.depthMeters
+      )
+      bodyBottomY = trackerShape.bottomY
+    }
+
+    let statusLight = ModelEntity(
+      mesh: statusLightMesh,
+      materials: [UnlitMaterial(color: .systemBlue)]
+    )
+    statusLight.position = SIMD3(
+      0,
+      bodyExtents.y * 0.08,
+      -bodyExtents.z * 0.46
+    )
+    tracker.addChild(statusLight)
+
+    // 実機modelは黒一色のため、実効tracking stateは足元の円で示す。
+    let stateMarker = ModelEntity(
+      mesh: .generatePlane(
+        width: bodyExtents.x * 1.32,
+        depth: bodyExtents.z * 1.32,
+        cornerRadius: bodyExtents.x * 0.66
+      ),
+      materials: [
+        translucentMaterial(color: .systemBlue, opacity: 0.5)
+      ]
+    )
+    stateMarker.position.y = bodyBottomY - 0.0015
+    tracker.addChild(stateMarker)
+
+    let forwardShaft = box(
+      size: SIMD3(0.0022, 0.0022, 0.036),
+      position: SIMD3(0, 0, -0.03),
+      material: UnlitMaterial(color: .systemBlue)
+    )
+    tracker.addChild(forwardShaft)
+
+    let forwardHead = ModelEntity(
+      mesh: .generateCone(height: 0.014, radius: 0.0055),
+      materials: [UnlitMaterial(color: .systemBlue)]
+    )
+    forwardHead.position = SIMD3(0, 0, -0.054)
+    forwardHead.orientation = simd_quatf(
+      angle: -.pi / 2,
+      axis: SIMD3(1, 0, 0)
+    )
+    tracker.addChild(forwardHead)
+
+    let rightAxis = box(
+      size: SIMD3(0.052, 0.003, 0.003),
+      position: SIMD3(0.026, 0, 0),
+      material: UnlitMaterial(color: .systemRed)
+    )
+    tracker.addChild(rightAxis)
+
+    let upAxis = box(
+      size: SIMD3(0.003, 0.052, 0.003),
+      position: SIMD3(0, 0.026, 0),
+      material: UnlitMaterial(color: .systemGreen)
+    )
+    tracker.addChild(upAxis)
+
+    let selection = ModelEntity(
+      mesh: .generatePlane(
+        width: bodyExtents.x * 1.85,
+        depth: bodyExtents.z * 1.85,
+        cornerRadius: bodyExtents.x * 0.92
+      ),
+      materials: [
+        translucentMaterial(
+          color: .controlAccentColor,
+          opacity: 0.18
+        )
+      ]
+    )
+    selection.position.y = bodyBottomY - 0.003
+    tracker.addChild(selection)
+
+    tracker.components.set(InputTargetComponent())
+    tracker.components.set(
+      CollisionComponent(
+        shapes: [
+          .generateBox(size: SIMD3(0.06, 0.06, 0.075))
+        ]
+      )
+    )
+    trackerRoot.addChild(tracker)
+
+    return TrackerEntityParts(
+      root: tracker,
+      tintedBody: tintedBody,
+      statusLight: statusLight,
+      stateMarker: stateMarker,
+      rightAxis: rightAxis,
+      upAxis: upAxis,
+      selection: selection
+    )
+  }
+
+  /// modelを読めなかったときの手続き的な本体。
+  private func addProceduralBody(to tracker: Entity) -> ModelEntity {
     let body = ModelEntity(
       mesh: trackerBodyMesh,
       materials: [shellMaterial(color: .systemBlue)]
@@ -1006,82 +1128,7 @@ private final class TrackerRealityScene: ObservableObject {
     mount.position = SIMD3(0, trackerShape.mountCenterY, 0)
     tracker.addChild(mount)
 
-    let statusLightAnchor = trackerShape.statusLightAnchor
-    let statusLight = ModelEntity(
-      mesh: statusLightMesh,
-      materials: [UnlitMaterial(color: .systemBlue)]
-    )
-    statusLight.position =
-      statusLightAnchor.position
-      + statusLightAnchor.normal * (trackerShape.statusLightRadius * 0.35)
-    tracker.addChild(statusLight)
-
-    let forwardShaft = box(
-      size: SIMD3(0.0022, 0.0022, 0.036),
-      position: SIMD3(0, 0, -0.03),
-      material: UnlitMaterial(color: .systemBlue)
-    )
-    tracker.addChild(forwardShaft)
-
-    let forwardHead = ModelEntity(
-      mesh: .generateCone(height: 0.014, radius: 0.0055),
-      materials: [UnlitMaterial(color: .systemBlue)]
-    )
-    forwardHead.position = SIMD3(0, 0, -0.054)
-    forwardHead.orientation = simd_quatf(
-      angle: -.pi / 2,
-      axis: SIMD3(1, 0, 0)
-    )
-    tracker.addChild(forwardHead)
-
-    let rightAxis = box(
-      size: SIMD3(0.052, 0.003, 0.003),
-      position: SIMD3(0.026, 0, 0),
-      material: UnlitMaterial(color: .systemRed)
-    )
-    tracker.addChild(rightAxis)
-
-    let upAxis = box(
-      size: SIMD3(0.003, 0.052, 0.003),
-      position: SIMD3(0, 0.026, 0),
-      material: UnlitMaterial(color: .systemGreen)
-    )
-    tracker.addChild(upAxis)
-
-    let selection = ModelEntity(
-      mesh: .generatePlane(
-        width: trackerShape.widthMeters * 1.7,
-        depth: trackerShape.depthMeters * 1.7,
-        cornerRadius: trackerShape.widthMeters * 0.85
-      ),
-      materials: [
-        translucentMaterial(
-          color: .controlAccentColor,
-          opacity: 0.14
-        )
-      ]
-    )
-    selection.position.y = trackerShape.bottomY - 0.002
-    tracker.addChild(selection)
-
-    tracker.components.set(InputTargetComponent())
-    tracker.components.set(
-      CollisionComponent(
-        shapes: [
-          .generateBox(size: SIMD3(0.06, 0.06, 0.075))
-        ]
-      )
-    )
-    trackerRoot.addChild(tracker)
-
-    return TrackerEntityParts(
-      root: tracker,
-      body: body,
-      statusLight: statusLight,
-      rightAxis: rightAxis,
-      upAxis: upAxis,
-      selection: selection
-    )
+    return body
   }
 
   private func update(
@@ -1103,11 +1150,11 @@ private final class TrackerRealityScene: ObservableObject {
     parts.upAxis.isEnabled = isSelected
     parts.selection.isEnabled = isSelected
     if parts.renderedTrackingState != tracker.trackingState {
-      parts.body.model?.materials = [
-        shellMaterial(color: tracker.trackingState.sceneColor)
-      ]
-      parts.statusLight.model?.materials = [
-        UnlitMaterial(color: tracker.trackingState.sceneColor)
+      let color = tracker.trackingState.sceneColor
+      parts.tintedBody?.model?.materials = [shellMaterial(color: color)]
+      parts.statusLight.model?.materials = [UnlitMaterial(color: color)]
+      parts.stateMarker.model?.materials = [
+        translucentMaterial(color: color, opacity: 0.5)
       ]
       parts.renderedTrackingState = tracker.trackingState
     }
@@ -1157,8 +1204,10 @@ private final class TrackerRealityScene: ObservableObject {
 @available(macOS 15.0, *)
 private final class TrackerEntityParts {
   let root: Entity
-  let body: ModelEntity
+  /// 手続き的形状のときだけ、状態色で塗り替える本体。
+  let tintedBody: ModelEntity?
   let statusLight: ModelEntity
+  let stateMarker: ModelEntity
   let rightAxis: ModelEntity
   let upAxis: ModelEntity
   let selection: ModelEntity
@@ -1166,15 +1215,17 @@ private final class TrackerEntityParts {
 
   init(
     root: Entity,
-    body: ModelEntity,
+    tintedBody: ModelEntity?,
     statusLight: ModelEntity,
+    stateMarker: ModelEntity,
     rightAxis: ModelEntity,
     upAxis: ModelEntity,
     selection: ModelEntity
   ) {
     self.root = root
-    self.body = body
+    self.tintedBody = tintedBody
     self.statusLight = statusLight
+    self.stateMarker = stateMarker
     self.rightAxis = rightAxis
     self.upAxis = upAxis
     self.selection = selection
