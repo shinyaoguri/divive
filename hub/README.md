@@ -88,6 +88,7 @@ testは次を含みます。
 - calibration profileのJSON往復、未較正・epoch不一致のgate、読み込み失敗の拒否
 - origin and forward推定の原点・前方・床面offset、退化検出、residual、中央値集約
 - 評価済みsnapshotへの較正適用、blocked Trackerの保持、space単位のstatus
+- point-set registrationの既知transform回復、鏡像の非採用、退化検出、対称行列の固有値分解
 - GUI設定からのscene生成と実時間runtimeの開始・停止
 - 実UDP socketを使うlocalhost loopback
 
@@ -158,7 +159,7 @@ commit済みbindingのbyte一致を検査します。
 - Windows実機BridgeとのGUI結合は未検証
 - HMAC、allowlist、clock mapping、jitter推定は未実装
 - calibrationはGUIへ未結線で、較正状態の表示と較正操作がない
-- point-set registration、role永続化、content配信は未実装
+- role永続化、content配信、presentation scaleは未実装
 
 16台×120Hzの規模では1回copyより、古いframeをqueueしないことと検証失敗を観測できる
 ことを先に固定します。copy最適化は受信処理時間の計測結果を見て判断します。
