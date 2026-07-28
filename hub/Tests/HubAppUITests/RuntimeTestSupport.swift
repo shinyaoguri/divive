@@ -8,10 +8,12 @@ import XCTest
 ///
 /// 「一定時間が経っても変化しない」ことを確かめる否定的な検証には使えない。その場合は
 /// 意図した経過時間を明示してsleepする。
+/// `isolation`は呼び出し元のactorを引き継ぐ。MainActorのmodelを条件から直接読むため。
 func waitUntil(
   _ description: String,
   timeout: Duration = .seconds(5),
   pollInterval: Duration = .milliseconds(5),
+  isolation: isolated (any Actor)? = #isolation,
   file: StaticString = #filePath,
   line: UInt = #line,
   condition: () async throws -> Bool

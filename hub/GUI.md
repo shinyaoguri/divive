@@ -49,14 +49,16 @@ macOSの運用コンソールとして、空間の動きと異常の発見を主
 
 - メニューバー: ウィンドウを閉じても継続する状態監視と最小限の復旧操作
 - ツールバー: Liquid Glassの`UDP受信 / Simulator`トグル、開始または停止、
-  右端の現在Source設定
+  較正、右端の現在Source設定
 - ライブ空間: Quaternionの向きが分かる3Dプレビュー、上面・正面・側面の
   直交プレビュー、Source状態、更新レート、Tracker数、Simulator直接操作
 - 右インスペクタ上部: 最大16台のTracker一覧
 - 右インスペクタ中央: 選択したTrackerのID、状態、位置、receive age
 - 右インスペクタ中央: 選択したTrackerの直近6秒の位置推移
-- 右インスペクタ下部: 現在のSourceに対応する診断値
+- 右インスペクタ中央: 選択したTrackerの配信区分とStage位置
+- 右インスペクタ下部: 較正状態のサマリと、現在のSourceに対応する診断値
 - 設定popover: 選択中のSourceだけを設定し、稼働中は「設定を反映」で再起動
+- 較正popover: profile、未較正空間の扱い、原点と前方による較正、space一覧
 
 Trackerは常に2列の選択可能な一覧として表示し、最大16台でも一覧内のスクロールを
 必要としません。選択Trackerは一覧とライブ空間の両方で強調します。8台を超える
@@ -126,6 +128,55 @@ packet数ではなくHubへ適用したframe数を使うため、複数batchのf
 Sourceを開始または切り替えた時点で履歴と累積値の基準をresetし、異なるSourceやsessionの
 品質を混在させません。9台以上ではタイムラインの高さを抑え、16台の一覧、選択詳細、診断を
 1120×700pt内へ維持します。
+
+## 較正
+
+ツールバーの照準ボタンで較正popoverを開きます。較正は常時見る操作ではないため
+popoverへ置き、状態のサマリだけを右インスペクタへ常時表示します。設定（歯車）とは
+別のボタンにして、同じ操作を重複させません。
+
+較正の考え方と座標規約は[Calibration](../docs/calibration.md)が正本です。
+
+### 未較正空間の扱い
+
+`確認`と`配信`を切り替えます。GUIの既定は`確認`です。
+
+| mode | 未較正・epoch不一致のTracker |
+| --- | --- |
+| 確認 | Tracker Spaceのまま観察でき、区分を`Tracker Space`と表示する |
+| 配信 | contentへ配信せず、区分を`非配信`と表示する |
+
+どちらのmodeでもTrackerを一覧から消しません。未較正を隠すと状況が分からなくなり、
+較正済みとして混ぜると誤った座標に気付けないためです。
+
+### 原点と前方による較正
+
+基準Trackerを原点へ置いて「原点を取得」、前方へ動かして「前方を取得」を押し、
+「較正を適用」でprofileへ保存します。取得を繰り返すと位置を蓄積し、成分ごとの
+中央値でまとめます。1回の観測だけで原点を決めると、遮蔽復帰やjitterで外れた
+1 frameがそのまま較正へ入るためです。
+
+床面offsetを入れると、原点サンプルがStageの`(0, offset, 0)`へ来ます。前方サンプルの
+水平距離が0.1m未満の場合はyawが安定しないため、較正を適用せずエラーを表示します。
+
+up軸は`+Y`に固定し、pitchとrollを持ち込みません。3点以上の対応点から傾きも含めて
+求める手順は`PointSetRegistration`として実装済みですが、GUIからの対応点取得は
+まだありません。
+
+### profileの保存先
+
+```text
+~/Library/Application Support/divive/calibration.json
+```
+
+atomicに保存し、起動時に読み込みます。読み込みに失敗した場合はidentity transformの
+空profileへ倒さず、右インスペクタとpopoverへ理由を表示します。壊れたprofileを黙って
+無視すると、未較正の座標が較正済みとしてcontentへ流れるためです。
+
+### プレビューとの関係
+
+3D・直交プレビュー、Simulatorの直接編集、作業空間はTracker Spaceのままです。較正は
+これらの表示座標を変えません。Stage座標は選択Trackerの詳細に数値で表示します。
 
 ## Simulator
 
@@ -267,6 +318,8 @@ sender allowlistがないため、信頼できるprivate LANでのみ使って�
 - 作業空間に応じた可変gridと全体の自動fit
 - 全Trackerのrole、実効tracking state、receive age
 - 選択Trackerの恒久IDとX / Y / Z位置
+- 選択Trackerの配信区分とStage Space位置
+- 較正済み / 未較正のtracking space数
 
 Simulatorでは生成drop、接続断、overflow、staleになった順序逆転frameを合算した
 累積欠落率とdeadline miss数を表示します。配信待ちframeはまだ欠落していないため
@@ -314,7 +367,9 @@ Source切替時は現在のSourceを停止し、選択した設定で新しいst
 - TrackerごとのID、role、回転編集と数値による位置編集
 - 複数段階のUndo/Redo、キーボードによる位置微調整
 - scene保存・読み込み
-- calibration、Recorder / Playback、content配信
+- point-set registrationの対応点取得と外れ値の採否提示
+- role mappingの編集と永続化
+- Recorder / Playback、content配信
 - `.app` bundle、署名、notarization、配布
 
 `swift run`で起動する開発用実行形式であり、現時点では配布用macOSアプリでは

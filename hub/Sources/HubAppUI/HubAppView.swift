@@ -1,4 +1,5 @@
 import Charts
+import HubCalibration
 import HubProtocol
 import HubSimulator
 import SwiftUI
@@ -6,6 +7,7 @@ import SwiftUI
 public struct HubAppView: View {
   @ObservedObject private var model: HubAppModel
   @State private var showsConfiguration = false
+  @State private var showsCalibration = false
   @State private var selectedTrackerID: String?
 
   public init(model: HubAppModel) {
@@ -32,6 +34,25 @@ public struct HubAppView: View {
             ToolbarSpacer(.flexible, placement: .primaryAction)
           }
         #endif
+
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            showsCalibration = true
+          } label: {
+            Label("較正", systemImage: "scope")
+          }
+          .help("Tracker SpaceからStage Spaceへの較正")
+          .accessibilityIdentifier("calibration-button")
+          .popover(
+            isPresented: $showsCalibration,
+            arrowEdge: .top
+          ) {
+            CalibrationPanel(
+              model: model,
+              selectedTrackerID: selectedTrackerID
+            )
+          }
+        }
 
         ToolbarItem(placement: .primaryAction) {
           Button {
@@ -857,6 +878,10 @@ private struct TrackerInspector: View {
 
       Divider()
 
+      CalibrationSummaryRow(model: model)
+
+      Divider()
+
       DiagnosticsSection(model: model)
     }
     .padding(16)
@@ -1029,6 +1054,8 @@ private struct SelectedTrackerPanel: View {
         DirectionComponent(axis: "Z", value: forward.z)
       }
 
+      StagePositionRow(tracker: tracker)
+
       TrackerQualityHistory(
         history: history,
         height: usesCompactLayout ? 62 : 82
@@ -1048,6 +1075,69 @@ private struct SelectedTrackerPanel: View {
     TrackerOrientationAxes(
       orientation: tracker.orientation
     ).forward
+  }
+}
+
+/// 選択Trackerの較正後の位置。プレビューの座標はTracker Spaceのまま変えない。
+private struct StagePositionRow: View {
+  let tracker: TrackerDisplayState
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Label(
+        tracker.calibrationDelivery.displayName,
+        systemImage: tracker.calibrationDelivery.statusSymbol
+      )
+      .font(.caption.weight(.medium))
+      .foregroundStyle(tracker.calibrationDelivery.displayColor)
+      .labelStyle(.titleAndIcon)
+
+      Spacer()
+
+      if let stagePosition = tracker.stagePosition {
+        DirectionComponent(axis: "X", value: stagePosition.x)
+        DirectionComponent(axis: "Y", value: stagePosition.y)
+        DirectionComponent(axis: "Z", value: stagePosition.z)
+      } else {
+        Text("未較正のため配信しません")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .accessibilityIdentifier("stage-position-row")
+  }
+}
+
+/// 右インスペクタへ常時表示する較正状態のサマリ。
+private struct CalibrationSummaryRow: View {
+  @ObservedObject var model: HubAppModel
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Text("較正")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+
+      Text(model.calibrationMode.displayName)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      Spacer()
+
+      if let error = model.calibrationErrorMessage {
+        Label(error, systemImage: "exclamationmark.triangle.fill")
+          .font(.caption)
+          .foregroundStyle(.orange)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .help(error)
+      } else {
+        Text(model.calibrationSummaryText)
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(model.hasUncalibratedSpace ? Color.orange : .secondary)
+      }
+    }
+    .accessibilityIdentifier("calibration-summary")
   }
 }
 

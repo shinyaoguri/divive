@@ -201,8 +201,12 @@ Tracker Space poseとliveness評価を残したまま返します。未較正の
 取り除かないのは、「表示しない」と「較正済みとして表示する」のどちらでもoperatorが
 状況を把握できなくなるためです。
 
-Content Profile Spaceのpresentation scale、role mappingの永続化、Mac GUIへの表示と
-較正操作はまだ実装していません。
+Mac GUIからはorigin and forward手順で較正でき、profileは
+`~/Library/Application Support/divive/calibration.json`へ保存されます。詳細は
+[Mac Hub GUI](../hub/GUI.md)を参照してください。
+
+Content Profile Spaceのpresentation scale、role mappingの永続化、GUIからの
+point-set registration対応点取得はまだ実装していません。
 
 
 ## Engine座標への変換

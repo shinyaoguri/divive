@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import HubCalibration
 import HubCore
 import HubNetworking
 import HubProtocol
@@ -22,6 +23,8 @@ public enum HubInputSource: String, CaseIterable, Identifiable, Sendable {
 public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
   public let id: String
   public let role: String
+
+  /// Tracker Spaceの位置。プレビューとSimulator編集はこの座標のまま扱う。
   public let position: Vector3
   public let orientation: Quaternion
   public let trackingState: TrackingState
@@ -29,8 +32,15 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
   public let liveness: HubLivenessState
   public let ageMilliseconds: Double
   public let frameSequence: UInt64
+  public let trackingSpaceID: UUIDBytes
+  public let spaceEpoch: UInt32
+  public let calibrationDelivery: CalibratedDelivery
 
-  init(_ state: EvaluatedTrackerState) {
+  /// Stage Spaceの位置。未較正でproduction modeの場合はnil。
+  public let stagePosition: Vector3?
+
+  /// calibration profileが無い状態のTracker。未較正として扱う。
+  init(uncalibrated state: EvaluatedTrackerState) {
     id = state.latest.pose.trackerID
     role = state.latest.pose.role
     position = state.latest.pose.position
@@ -40,6 +50,26 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     liveness = state.liveness
     ageMilliseconds = Double(state.receiveAgeNS) / 1_000_000
     frameSequence = state.latest.frameSequence
+    trackingSpaceID = state.latest.trackingSpaceID
+    spaceEpoch = state.latest.spaceEpoch
+    calibrationDelivery = .blocked
+    stagePosition = nil
+  }
+
+  init(_ state: CalibratedTrackerState) {
+    id = state.latest.latest.pose.trackerID
+    role = state.latest.latest.pose.role
+    position = state.trackerSpacePose.position
+    orientation = state.trackerSpacePose.orientation
+    trackingState = state.trackingState
+    trackingReason = state.trackingReason
+    liveness = state.liveness
+    ageMilliseconds = Double(state.receiveAgeNS) / 1_000_000
+    frameSequence = state.latest.latest.frameSequence
+    trackingSpaceID = state.latest.latest.trackingSpaceID
+    spaceEpoch = state.latest.latest.spaceEpoch
+    calibrationDelivery = state.delivery
+    stagePosition = state.stagePose?.position
   }
 
   init(
@@ -51,7 +81,11 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     trackingReason: TrackingReason,
     liveness: HubLivenessState,
     ageMilliseconds: Double,
-    frameSequence: UInt64
+    frameSequence: UInt64,
+    trackingSpaceID: UUIDBytes = .zero,
+    spaceEpoch: UInt32 = 0,
+    calibrationDelivery: CalibratedDelivery = .blocked,
+    stagePosition: Vector3? = nil
   ) {
     self.id = id
     self.role = role
@@ -62,6 +96,10 @@ public struct TrackerDisplayState: Equatable, Identifiable, Sendable {
     self.liveness = liveness
     self.ageMilliseconds = ageMilliseconds
     self.frameSequence = frameSequence
+    self.trackingSpaceID = trackingSpaceID
+    self.spaceEpoch = spaceEpoch
+    self.calibrationDelivery = calibrationDelivery
+    self.stagePosition = stagePosition
   }
 }
 
@@ -123,6 +161,26 @@ public final class HubAppModel: ObservableObject {
   @Published public private(set) var boundEndpoint: String?
   @Published public private(set) var lastRemoteAddress: String?
 
+  /// GUIの既定はpreview。未較正でもTrackerを観察できるようにしつつ、区分は明示する。
+  @Published public var calibrationMode: CalibrationDeliveryMode = .preview {
+    didSet {
+      guard oldValue != calibrationMode else { return }
+      Task { await refresh() }
+    }
+  }
+  @Published public internal(set) var calibrationSpaces: [CalibratedSpaceState] = []
+  @Published public internal(set) var calibrationOriginSample: CalibrationSampleSlot?
+  @Published public internal(set) var calibrationForwardSample: CalibrationSampleSlot?
+  @Published public var calibrationFloorHeightOffsetText = "0"
+  @Published public internal(set) var calibrationMessage: String?
+  @Published public internal(set) var calibrationErrorMessage: String?
+  @Published public internal(set) var lastCalibrationEstimate: CalibrationEstimate?
+  @Published public internal(set) var calibrationProfileName = ""
+  @Published public internal(set) var calibrationProfileRevision: UInt32 = 0
+  @Published public internal(set) var calibrationStorePath = ""
+
+  var calibrationDocument: CalibrationDocument?
+
   private let simulatorRuntime: SimulatorRuntime
   private let networkRuntime: NetworkRuntime
   private var previousSample: (source: HubInputSource, monotonicNS: UInt64, generation: UInt64)?
@@ -134,10 +192,15 @@ public final class HubAppModel: ObservableObject {
 
   public init(
     simulatorRuntime: SimulatorRuntime = SimulatorRuntime(),
-    networkRuntime: NetworkRuntime = NetworkRuntime()
+    networkRuntime: NetworkRuntime = NetworkRuntime(),
+    calibrationStore: CalibrationStore = CalibrationStore(
+      url: CalibrationDocument.defaultStoreURL()
+    ),
+    now: Date = Date()
   ) {
     self.simulatorRuntime = simulatorRuntime
     self.networkRuntime = networkRuntime
+    loadCalibrationDocument(store: calibrationStore, now: now)
   }
 
   public var displayedSource: HubInputSource {
@@ -390,7 +453,11 @@ public final class HubAppModel: ObservableObject {
       trackingReason: current.trackingReason,
       liveness: current.liveness,
       ageMilliseconds: current.ageMilliseconds,
-      frameSequence: current.frameSequence
+      frameSequence: current.frameSequence,
+      trackingSpaceID: current.trackingSpaceID,
+      spaceEpoch: current.spaceEpoch,
+      calibrationDelivery: current.calibrationDelivery,
+      stagePosition: current.stagePosition
     )
     publish(updated, to: \.trackers)
   }
@@ -470,7 +537,7 @@ public final class HubAppModel: ObservableObject {
     )
     publish(snapshot.metrics.missedDeadlines, to: \.missedDeadlines)
     updateTrackers(
-      snapshot.hubState.trackers.map(TrackerDisplayState.init),
+      calibratedTrackers(from: snapshot.hubState),
       sampledAtNS: snapshot.monotonicNS,
       cumulativeFrameLoss:
         snapshot.metrics.droppedFrames
@@ -509,7 +576,7 @@ public final class HubAppModel: ObservableObject {
       to: \.lastProcessingMicroseconds
     )
     updateTrackers(
-      snapshot.hubState.trackers.map(TrackerDisplayState.init),
+      calibratedTrackers(from: snapshot.hubState),
       sampledAtNS: snapshot.monotonicNS,
       cumulativeFrameLoss: receiver.missingFrames,
       cumulativeDeliveredFrames:
@@ -565,7 +632,7 @@ public final class HubAppModel: ObservableObject {
   }
 
   /// `@Published`は同値代入でも通知するため、idle sourceでは変更時だけpublishする。
-  private func publish<Value: Equatable>(
+  func publish<Value: Equatable>(
     _ value: Value,
     to keyPath: ReferenceWritableKeyPath<HubAppModel, Value>
   ) {
