@@ -13,6 +13,18 @@ import sys
 from pathlib import Path
 
 
+def force_utf8_output() -> None:
+    """標準出力をUTF-8にする。
+
+    Windowsの既定はcp1252で、日本語のログを書くだけでUnicodeEncodeErrorになる。
+    検査結果ではなくメッセージの出力でbuildが落ちるのを防ぐ。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def relative_sources(root: Path, suffix: str) -> dict[str, Path]:
     return {
         str(path.relative_to(root)): path
@@ -22,6 +34,7 @@ def relative_sources(root: Path, suffix: str) -> dict[str, Path]:
 
 
 def main() -> int:
+    force_utf8_output()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("generated", type=Path, help="flatcが生成したdirectory")
     parser.add_argument("committed", type=Path, help="repositoryへcommitしたdirectory")
