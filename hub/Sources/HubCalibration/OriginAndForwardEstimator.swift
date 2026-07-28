@@ -6,6 +6,10 @@ public enum CalibrationEstimationError: Error, Equatable, Sendable {
   case nonFiniteSample
   case nonFiniteFloorHeightOffset
   case degenerateForwardDirection(horizontalLengthM: Double)
+  case insufficientCorrespondences(count: Int)
+  case correspondencesTooClose(spreadM: Double)
+  case collinearCorrespondences(planarityRatio: Double)
+  case degenerateCorrespondences
 }
 
 /// 静止させたTrackerの複数frameからまとめた1つの観測点。

@@ -330,7 +330,8 @@ UnityでHub APIの使い勝手を確定してからUnrealとWebへ展開しま�
 - [x] SDK共通のgolden fixture
 - [x] 評価済みHub snapshotへの較正適用とTracker単位の配信区分
 - [x] origin and forward較正手順の推定器とresidual評価
-- [ ] point-set registrationとresidual error表示UI
+- [x] point-set registrationと退化検出
+- [ ] residual error表示UIと外れ値の採否提示
 - [ ] optional presentation scaleの分離
 - [ ] Mac GUIへの較正状態表示と較正操作
 

@@ -115,9 +115,10 @@ pose frameの履歴queueは作らず、常にlatest valueを優先します。UD
 - origin and forward手順の推定、退化検出、known pointによるresidual評価
 - 評価済みHub snapshotへの較正適用と、Tracker単位の`stage` / `rawTrackerSpace` /
   `blocked`区分
+- 3点以上の対応点からのpoint-set registration（Horn法、退化検出、residual）
 
 Mac GUIへはまだ結線しておらず、較正状態の表示と較正操作がありません。
-point-set registrationとpresentation scaleも未実装です。
+presentation scaleと外れ値の採否提示も未実装です。
 
 主要な入口:
 
@@ -127,6 +128,7 @@ point-set registrationとpresentation scaleも未実装です。
 - [Issue #21](https://github.com/shinyaoguri/divive/issues/21)
 - [Issue #23](https://github.com/shinyaoguri/divive/issues/23)
 - [Issue #27](https://github.com/shinyaoguri/divive/issues/27)
+- [Issue #29](https://github.com/shinyaoguri/divive/issues/29)
 
 ### SimulatorとMac GUI
 
@@ -233,7 +235,7 @@ Ultimate TrackerのH2、3〜5台同時試験、Windows BridgeからMacへの有�
 
 ### Hubとcontent
 
-- calibrationのGUI結線とpoint-set registration
+- calibrationのGUI結線と外れ値の採否提示
 - role mappingの永続化
 - Unity Packageとcontent向けlocal API
 - MCAP Recorder / Playback
@@ -277,7 +279,7 @@ calibration coreは[Issue #21](https://github.com/shinyaoguri/divive/issues/21)�
 
 1. Mac GUIへ`CalibrationResolver.project(_:)`と`OriginAndForwardEstimator`を結線し、
    未較正spaceの表示、production / preview切替、較正操作を可視化する
-2. point-set registrationとresidual表示を独立したIssueとして定義する
+2. residual表示と外れ値の採否提示を独立したIssueとして定義する
 
 どちらもUnity SDKやRecorderより先に固定します。content向けlocal transportを
 決める前に、Stage Spaceのpublic contractを確定させるためです。

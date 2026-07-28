@@ -111,9 +111,21 @@ known pointは`CalibrationCheckPoint`として与え、RMSとmax residualを
 3点以上の対応点からrigid transformを推定します。
 
 - 対応点の幾何が退化していないこと
-- SVD/Kabsch等でrotation/translationを推定
+- rotation/translationを推定
 - RMS/max residualを表示
 - 外れ値除外は自動で隠さず、採否をoperatorへ示す
+
+`PointSetRegistration`が実装済みです。推定にはHornのquaternion法を使います。対応点から
+作った4x4対称行列の最大固有ベクトルがrotationのquaternionになり、固有値分解はJacobi法で
+解きます。quaternionを直接得るため、SVD/Kabschで必要な反射補正が不要になり、鏡像解を
+構造的に作れません。
+
+退化は重心まわりの共分散行列の固有値で判定します。最大固有値の平方根が0.05m未満なら
+`correspondencesTooClose`、第2固有値との比が`1e-4`未満なら`collinearCorrespondences`を
+返します。同一平面上の対応点は退化ではないため受け入れます。
+
+外れ値は自動除外しません。黙って点を捨てると、較正が良く見えたまま実空間とずれるため、
+residualを返して採否をoperatorへ委ねます。
 
 ## 複数Bridgeのキャリブレーション
 
@@ -178,6 +190,7 @@ Swift側の`HubCalibration`が、rigid transform、profile、gate、永続化、
 | `CalibrationStore` | JSONへのatomic保存と読み込み |
 | `OriginAndForwardEstimator` | origin and forward手順の推定、退化検出、residual評価 |
 | `CalibrationResolver.project(_:)` | 評価済みHub snapshotへの較正適用とTracker単位の配信区分 |
+| `PointSetRegistration` | 3点以上の対応点からのrigid推定、退化検出、residual |
 
 `CalibrationResolver`は較正済みspaceを`stage`、未較正を`uncalibrated`、epoch不一致を
 `epochMismatch`として返します。production modeでは後2者を配信せず、preview modeでは
@@ -188,8 +201,8 @@ Tracker Space poseとliveness評価を残したまま返します。未較正の
 取り除かないのは、「表示しない」と「較正済みとして表示する」のどちらでもoperatorが
 状況を把握できなくなるためです。
 
-point-set registration、Content Profile Spaceのpresentation scale、role mappingの
-永続化、Mac GUIへの表示と較正操作はまだ実装していません。
+Content Profile Spaceのpresentation scale、role mappingの永続化、Mac GUIへの表示と
+較正操作はまだ実装していません。
 
 
 ## Engine座標への変換
