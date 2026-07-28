@@ -3,8 +3,12 @@
 Status: **Accepted (v1)**
 
 この文書はwire contractの設計基準です。実装の正は
-[`protocol/schema/pose.fbs`](../protocol/schema/pose.fbs)と
+[`protocol/schema`](../protocol/schema)配下のschemaと
 [`protocol/README.md`](../protocol/README.md)です。
+
+wireは責務の違う2つのplaneに分かれます。BridgeからHubへ取得したままのTracker
+Spaceを運ぶpose planeと、HubからcontentへStage Spaceの最新値を運ぶstage planeです。
+stage planeの決定は[ADR 0006](adr/0006-stage-plane-content-transport.md)にあります。
 
 ## 通信レイヤー
 
@@ -12,7 +16,8 @@ Status: **Accepted (v1)**
 | --- | --- | --- | --- |
 | Bridge → Hub pose | UDP unicast | fixed envelope + FlatBuffers | latest value |
 | Bridge ↔ Hub control | WebSocket | JSON | reliable |
-| Hub → Unity/Unreal | localhost UDP | envelope + FlatBuffers | latest value |
+| Hub → Unity/Unreal stage | localhost UDP | envelope + FlatBuffers | latest value |
+| Unity/Unreal → Hub subscription | localhost UDP | envelope + FlatBuffers | TTLで失効 |
 | Hub → Web/p5.js | WebSocket | JSON、将来binary | reliable connection、latest value semantics |
 | Hub control API | HTTP / WebSocket | JSON | reliable |
 
@@ -55,7 +60,7 @@ UDP datagramは72-byte固定長envelopeとFlatBuffers payloadで構成します�
 | 0 | 4 | magic | ASCII `DVIV` |
 | 4 | 1 | protocol major | compatibility |
 | 5 | 1 | protocol minor | compatibility |
-| 6 | 1 | message type | v1はpose batch |
+| 6 | 1 | message type | `1` pose batch、`2` stage frame、`3` subscription |
 | 7 | 1 | flags | HMAC等 |
 | 8 | 2 | header length | v1は72 |
 | 10 | 2 | payload length | bounds check |
@@ -104,10 +109,60 @@ Tracker record:
 
 roleはHubを正とします。Bridgeがruntime roleを報告する場合も、`runtime_role`として別fieldに入れます。
 
+## Stage frame
+
+Hubがcontentへ配信する最新値です。取得backend、Bridgeのbatch分割、未較正spaceの
+生の姿勢はcontentへ渡しません。
+
+Frame metadata:
+
+- `hub_monotonic_ns`（評価に使ったHubのclock）
+- `generation`（Hub stateの世代）
+- `profile_id`と`profile_revision`（較正profileの識別）
+- `delivery_mode`（production / preview）
+- `publish_rate_hz`
+
+Tracker record:
+
+- permanentまたはsession ID、logical role
+- `bridge_id`、`tracking_space_id`、`space_epoch`
+- `delivery`（stage / raw_tracker_space / blocked）
+- position、orientation、velocity（`blocked`では存在しない）
+- tracking state、tracking reason
+- `liveness`（fresh / stale / disconnected）
+- connected、battery
+- `receive_age_ns`、`source_frame_sequence`、`capture_monotonic_ns`
+
+`delivery`と`liveness`と`tracking_state`は別物です。`delivery`はHubが較正できたか、
+`liveness`は最近受信できているか、`tracking_state`はTrackerが追跡できているかを
+表します。contentがこの3つを混同しないよう、それぞれ別のfieldで渡します。
+
+envelopeの`session_id`欄はHub sessionを、`bridge_id`欄はHub instanceを指します。
+Hubを再起動すると`session_id`が変わるため、contentは配信元の入れ替わりを検出できます。
+
+### 購読
+
+contentがHubへ購読messageを送り、TTL内に更新し続ける間だけHubが配信します。
+
+- clientが`client_name`、`requested_rate_hz`、`ttl_ms`を送る
+- HubはTTLを許容範囲へ丸め、期限を過ぎた配信先を落とす
+- `unsubscribe`を立てると即座に配信先から外れる
+- Hubは既定でloopback以外からの購読を拒否する
+- 購読は配信先の登録であり、認証ではない
+
+UDPは送信元を詐称できます。LANへ配信先を広げる前に、HMACとtokenを入れます。
+
 ## Datagram sizeとbatch分割
 
-IP fragmentationを避けるため、datagram全体を最大1,200 bytesにします。72-byte
-envelopeを除いたFlatBuffers payload budgetは1,128 bytesです。
+pose planeはIP fragmentationを避けるため、datagram全体を最大1,200 bytesにします。
+72-byte envelopeを除いたFlatBuffers payload budgetは1,128 bytesです。
+
+stage planeは既定でloopbackに閉じるため、この制限を共有しません。上限は8,192 bytes
+とし、v1では分割しません。`batch_index`と`batch_count`はLANへ広げるときのために
+予約し、`0` / `1`以外を拒否します。上限を超えるframeはsilent truncateせず、encode
+errorとして統計へ計上します。
+
+以下はpose planeのbatch規則です。
 
 - 1 capture tickが複数datagramに分かれてよい
 - batchは同じ`frame_sequence`とcapture timeを持つ
@@ -240,7 +295,8 @@ protocol versionとは独立です。
 - `calibration_revision`
 - `space_epoch`
 
-をframe/配信metadataに付与します。
+をframe/配信metadataに付与します。stage planeでは`profile_id`、`profile_revision`、
+Trackerごとの`space_epoch`として運びます。
 
 ## 認証
 
@@ -283,8 +339,9 @@ JSON APIは人間が読めることを優先し、binary wire layoutを模倣し
 ## 未決定事項
 
 - Bridge control connectionのdiscovery手順
-- native clientをUDP登録するhandshake
 - JSON WebSocketのrate limit
+- stage planeをLANへ広げる場合の認証とbatch分割
+- clock mappingが入ったあとの、描画時刻に対する補間APIの置き場
 
 HMACなしpacketには独自checksumを追加しません。UDP checksum、length検査、
 FlatBuffers verifierを使い、送信元認証が必要な段階でHMACを有効化します。

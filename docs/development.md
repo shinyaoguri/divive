@@ -122,6 +122,8 @@ generated codeは手編集しません。schema compiler versionを固定し、�
 - latest pose APIとevent APIを分離
 - tracking lost時の既定挙動を文書化
 - coordinate conversionをgolden testsで検証
+- 極性vectorと軸性vectorの変換を区別する（角速度をpositionと同じ式で変換しない）
+- 較正区分（stage / raw_tracker_space / blocked）をcontentへそのまま渡す
 
 ## テスト戦略
 
@@ -152,7 +154,7 @@ runnerの負荷でschedulerが遅れると、次のframeが届く前にassertion
 ### Integration
 
 - simulated Bridge → Hub
-- Hub → Unity test scene
+- Hub → Unity SDK（`scripts/check_stage_end_to_end.py`）
 - Hub → Web client
 - Recorder → Playback → same state
 - runtime reconnect
@@ -180,12 +182,27 @@ runnerの負荷でschedulerが遅れると、次のframeが届く前にassertion
 | protocol | Linux/macOS/Windows | schema generation、golden vectors |
 | bridge-unit | Windows + macOS | common code、Windows artifact |
 | hub-unit | macOS | Swift packages |
-| unity | supported Unity runner | package tests |
+| unity | Unity同梱Roslyn（現状はlocal実行） | package tests |
 | web | Linux | TypeScript tests |
 | unreal | Windows | plugin compile、後期導入 |
 | hardware | self-hosted Windows | opt-in/manual |
 
 hardware jobは通常PRで自動実行しません。機材の排他制御とruntime状態を管理できるようになってから導入します。
+
+unity jobはまだCIへ入れていません。Unity本体のbatchmodeはEditor licenseを要求し、
+GitHubのrunnerにはUnityが入っていないため、jobを置いても常にskipされます。
+「実行したように見えて何も検証していない」状態を作らないよう、当面はlocalで
+実行します。
+
+```bash
+python3 scripts/run_unity_package_tests.py
+python3 scripts/check_stage_end_to_end.py
+```
+
+前者はUnity同梱のRoslynと.NET runtimeでSDKのcoreをbuild・実行します。後者は
+`divive-simulator --publish`を起動し、SDKと同じC#実装でUDP受信できることを確認
+します。schemaとcommit済みbindingの乖離、golden vectorとUnity Package側の写しの
+乖離は、protocol jobとhub jobがCIで検出します。
 
 ## Branchとreview
 

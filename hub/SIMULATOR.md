@@ -144,6 +144,31 @@ CLIが生成する既定role:
 | 3 | `right_foot` |
 | 4以降 | `prop_1`、`prop_2`、… |
 
+### contentへの配信
+
+`--publish`を付けると、生成した姿勢をUnityなどのcontentへUDPで配信します。実機も
+Windowsも使わずに、Hubからcontentまでの経路を確認できます。
+
+```bash
+swift run divive-simulator --trackers 3 --motion circle --publish
+```
+
+| option | 既定値 | 内容 |
+| --- | --- | --- |
+| `--publish` | 無効 | stage frameの配信を開始する |
+| `--publish-host` | `127.0.0.1` | 配信socketのbind先 |
+| `--publish-port` | `41321` | 配信port |
+| `--publish-rate` | `--rate`と同じ | 配信頻度 |
+| `--publish-mode` | `preview` | `production` / `preview` |
+
+Simulatorの追跡空間には較正profileがありません。`production`では全Trackerが
+`blocked`になり姿勢を配信しないため、既定は`preview`です。preview modeは
+「較正していないTracker Spaceである」ことを明示したうえで姿勢を配信します。
+identity transformを黙って補うことはしません。
+
+統計行には購読者数、配信frame数、送信datagram数、encode error、不正な購読packet数が
+追加されます。受け手の実装は[unity/README.md](../unity/README.md)を参照してください。
+
 ## Library API
 
 `SimulatorEngine`は実時間schedulerを持たない値型です。GUIやtestが任意の

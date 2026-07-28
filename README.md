@@ -85,6 +85,7 @@ Bridgeは複数台接続できます。各Bridgeの追跡空間は独立して�
 | 文書 | 内容 |
 | --- | --- |
 | [開発引き継ぎ](docs/handoff.md) | 現在地、未完了事項、別端末・別agentへの再開手順 |
+| [Unity SDK](unity/README.md) | Unity packageの使い方、public contract、動作確認手順 |
 | [ドキュメント一覧](docs/README.md) | 文書の入口と更新ルール |
 | [要求仕様](docs/requirements.md) | 要求、性能目標、前提、traceability |
 | [アーキテクチャ](docs/architecture.md) | コンポーネント、データフロー、障害設計 |
@@ -134,6 +135,12 @@ turntable orbit、pan、zoom、作業空間の全体表示を備え、3Dでは�
 上面・正面・側面では2軸の精密編集ができます。Simulator実行中は、任意の有限作業空間を
 自動fitしながらTrackerのXYZ位置をマウス操作し、仮想Base Station 2台の設置関係も
 確認できます。現段階では開発用実行形式です。
+
+[Unity SDK](unity/README.md)は、Hubが配信するStage Spaceの姿勢をUnityで受け取る
+UPM packageと、Play押下で動作確認できるサンプルプロジェクトです。Hubからcontentへの
+配信経路（stage plane）はlocalhost UDPで、message typeとschemaを
+[protocol](protocol/README.md)へ追加しました。Simulatorから配信できるため、実機も
+Windowsも使わずにUnityまでの経路を確認できます。
 
 [UDP send test](bridge/tools/send-test/README.md)は、取得runtimeに依存しないC++
 publisherからSwift receiverまでの疎通、複数Trackerのbatch分割、60 / 90 / 120Hz

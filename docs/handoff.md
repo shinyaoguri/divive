@@ -3,10 +3,9 @@
 ## この文書の目的
 
 この文書は、別の開発端末やAI agentがGitHub上の情報だけを使ってdiviveの開発を
-再開するための入口です。2026-07-28時点の基準は、PR
-[#18](https://github.com/shinyaoguri/divive/pull/18)のSimulator 3D操作と、
-[Issue #21](https://github.com/shinyaoguri/divive/issues/21)のcalibration coreまでを
-取り込んだ`main`です。
+再開するための入口です。2026-07-28時点の基準は、calibration
+core（[Issue #21](https://github.com/shinyaoguri/divive/issues/21)）と、
+Hubからcontentへのstage plane配信・Unity SDKまでを取り込んだ`main`です。
 
 進捗がこの文書より新しい場合は、次の順で判断してください。
 
@@ -132,6 +131,37 @@ presentation scale、外れ値の採否提示は未実装です。
 - [Issue #29](https://github.com/shinyaoguri/divive/issues/29)
 - [Issue #31](https://github.com/shinyaoguri/divive/issues/31)
 
+### Stage plane配信とUnity SDK
+
+Hubからcontentへの配信経路を「stage plane」として確定しました。判断は
+[ADR 0006](adr/0006-stage-plane-content-transport.md)にあります。
+
+- 既存の72-byte envelopeへmessage type `2`（stage frame）と`3`（購読）を追加
+- `stage.fbs`は`pose.fbs`をincludeし、canonical semanticsとenumを共有する
+- stage planeの上限は8,192 byte。loopback限定なのでv1では分割しない
+- Swift（Hub）とC#（Unity）のbindingを生成してcommitし、乖離をbuildで検出する
+- 較正済みsnapshotをTTL付き購読者へ配信する`HubDistribution`
+- `blocked`のTrackerは姿勢を落とし、区分・role・状態だけを配信する
+- `divive-simulator --publish`で実機なしにcontentまでの経路を確認できる
+- Unity Package `com.divive.tracking`と、Play押下で動くサンプルプロジェクト
+- 受信threadとmain threadを3つのsnapshotで受け渡し、定常状態のallocationを0にする
+- canonical → Unity座標の変換。角速度は軸性vectorとして別式で変換する
+
+Unity Editorのbatchmodeはlicenseを要求するため、CIでは使っていません。SDKのcoreは
+Unity同梱のRoslynと.NET runtimeで検証します。
+
+```bash
+python3 scripts/run_unity_package_tests.py
+python3 scripts/check_stage_end_to_end.py
+```
+
+主要な入口:
+
+- [Unity SDK](../unity/README.md)
+- [stage plane wire contract](../protocol/README.md)
+- [HubDistribution](../hub/Sources/HubDistribution)
+- [ADR 0006](adr/0006-stage-plane-content-transport.md)
+
 ### SimulatorとMac GUI
 
 - 1〜16台、30 / 60 / 90 / 120Hz
@@ -239,7 +269,9 @@ Ultimate TrackerのH2、3〜5台同時試験、Windows BridgeからMacへの有�
 
 - GUIからのpoint-set registration対応点取得と外れ値の採否提示
 - role mappingの永続化
-- Unity Packageとcontent向けlocal API
+- Mac GUIからのstage plane配信の開始・停止と状態表示（現状はCLIのみ）
+- Unity SDKのmDNS discoveryと、clock mappingに基づく補間
+- Unity Editorでのsample動作確認（Editor licenseが必要）
 - MCAP Recorder / Playback
 - JSON WebSocket、p5.js client
 - Unreal Engine Plugin
@@ -249,6 +281,7 @@ Ultimate TrackerのH2、3〜5台同時試験、Windows BridgeからMacへの有�
 
 - control channel、clock mapping、RTT/offset推定
 - mDNS、sender allowlist、token認証、UDP HMAC
+- stage planeの認証。入るまで既定のloopback bindを外さない
 - `.app` bundle、署名、notarization
 - Windows自動起動、crash recovery、log rotation
 - 複数Bridge結合と16台相当負荷試験
@@ -302,11 +335,17 @@ testしておらず、実機Bridgeが来たときに実地で確認する必要�
 
 ### Macだけで進める場合
 
-Stage Spaceのpublic contractは較正まで含めて固まったため、次はUnity SDKの
-local API contractをIssueまたはADRで定義するのが依存関係に合います。content向け
-local transportはまだ固定していないため、Unity実装前にlatest pose、event、補間、
-thread dispatch、座標変換のpublic contractを明確にしてください。Unityで使い勝手を
-確定してから、Recorder、p5.js、Unrealへ展開します。
+Unity SDKまで通ったので、次の候補は3つです。
+
+1. Mac GUIからstage plane配信を操作できるようにする。現状はCLIからしか配信できず、
+   GUIでSimulatorを動かしながらUnityへ配信できない
+2. Unity Editorでsampleを実際に動かして、componentとEditor統合を確認する。
+   Editor licenseの認証が必要
+3. 同じstage schemaでp5.jsまたはUnrealへ展開する。Unityで使い勝手を確定してから
+   広げる順序は変えない
+
+Recorderを先に進める場合も、記録対象はTracker Spaceのままにします。stage planeは
+較正結果に依存するため、記録の正本にしません。
 
 Simulatorを優先する場合は、Issue #17の残りを一度に実装せず、3軸gizmoと
 キーボード/数値入力を別の検証可能なIssueへ分割します。
@@ -321,6 +360,8 @@ Simulatorを優先する場合は、Issue #17の残りを一度に実装せず�
 - 異なるtracking spaceを未較正のまま混合しない
 - Windows/Macのmonotonic clockをそのまま差し引かない
 - OpenVR固有型やfieldをpublic canonical modelへ漏らさない
+- 未較正spaceの姿勢を、Stage Spaceの値としてcontentへ渡さない
+- 生成bindingを手編集せず、schemaから生成してcommitする
 - `requireHmd=false`をBridgeが無断設定しない
 - raw実機証跡、secret、token、個人情報をcommitしない
 
@@ -356,13 +397,22 @@ python3 scripts/check_docs.py
 cmake --preset macos-debug
 cmake --build --preset macos-debug
 ctest --preset macos-debug
+cmake --build --preset macos-debug \
+  --target divive_protocol_swift_codegen_check divive_protocol_csharp_codegen_check
 
 swift test --package-path hub
 swift run --package-path hub divive-hub-app
+
+python3 scripts/run_unity_package_tests.py
+python3 scripts/check_stage_end_to_end.py
 ```
 
-calibration core追加時点のHub testは126件です。test数だけでなく失敗0件を確認して
-ください。
+stage plane追加時点のHub testは203件です。test数だけでなく失敗0件を確認して
+ください。Unity Package testは11件です。
+
+`check_stage_end_to_end.py`は`divive-simulator --publish`を起動し、Unity SDKと同じ
+C#実装でUDP受信します。Unity Editorのlicenseがなくても、SwiftのencoderとC#の
+decoderが実際のsocket越しに噛み合うことを確認できます。
 
 ### Windows
 
@@ -409,6 +459,7 @@ hardware testは通常CIではなく、Issue #12と
 | [#15](https://github.com/shinyaoguri/divive/pull/15) | OpenVR pose → UDP Bridge |
 | [#16](https://github.com/shinyaoguri/divive/pull/16) | Simulator transport障害注入 |
 | [#18](https://github.com/shinyaoguri/divive/pull/18) | 3D viewportと直接操作 |
+| [#22](https://github.com/shinyaoguri/divive/pull/22)〜[#32](https://github.com/shinyaoguri/divive/pull/32) | calibration coreとMac GUIの較正 |
 
 PR本文には実装理由、検証結果、手動確認項目が残っています。特定機能の設計意図を
 調べる場合は、`git blame`だけでなく対応PRも読んでください。
